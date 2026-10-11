@@ -222,10 +222,12 @@ async function processFileKeys(
               },
               { onConflict: 'file_key' },
             )
-            .then(() => {})
-            .catch((err) => {
-              console.warn('Opportunistic backfill error for %s:', candidateKey, err);
-            });
+            .then(
+              () => {},
+              (err: unknown) => {
+                console.warn('Opportunistic backfill error for %s:', candidateKey, err);
+              },
+            );
         }
       }),
     );

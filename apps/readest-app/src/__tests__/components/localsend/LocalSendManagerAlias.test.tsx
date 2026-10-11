@@ -49,7 +49,7 @@ const startLocalSend = vi.fn(async (alias: string, deviceModel: string) => ({
   multicastError: null,
 }));
 const stopLocalSend = vi.fn(async () => {});
-const setLocalSendDiscoverable = vi.fn(async () => {});
+const setLocalSendDiscoverable = vi.fn(async (_active?: boolean) => {});
 const isLocalSendAlive = vi.fn(async () => true);
 
 vi.mock('@/services/localsend/service', () => ({

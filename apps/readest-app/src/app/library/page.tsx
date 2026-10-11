@@ -27,7 +27,8 @@ import { DEFAULT_NEARBY_WORDS } from '@/utils/searchConfig';
 import { clearLibrarySearchHistory, loadLibrarySearchHistory } from './utils/searchHistory';
 import type { LibrarySearchTarget } from '@/types/book';
 import { navigateToLibrary, navigateToLogin, navigateToReader } from '@/utils/nav';
-import { listFormater } from '@/utils/book';
+import { splitLibraryOpenIds } from '@/utils/audiobook';
+import { listFormater, markBookDeleted } from '@/utils/book';
 import { getImportErrorMessage } from '@/services/errors';
 import { ingestFile } from '@/services/ingestService';
 import { saveBookMetadataEdit } from '@/services/bookMetadataEdit';
@@ -1248,15 +1249,10 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
         if (deleteAction === 'local' || deleteAction === 'both' || deleteAction === 'purge') {
           await appService?.deleteBook(book, deleteAction === 'purge' ? 'purge' : 'local');
           if (deleteAction === 'both' || deleteAction === 'purge') {
-            const deletedAt = Date.now();
-            book.deletedAt = deletedAt;
-            book.downloadedAt = null;
-            book.coverDownloadedAt = null;
-            book.fileSyncDeletionRequestedAt = deletedAt;
-            // The row's progress survives the tombstone and comes back on a
-            // re-import; null (not undefined, which JSON drops) clears it in
-            // the cloud too (#6532).
-            if (deleteAction === 'purge') book.progress = null;
+            // The tombstone also bumps `updatedAt`, so it outranks the row's
+            // own older page-turn progress in the whole-row sync merge — see
+            // markBookDeleted for what broke without that (#6663).
+            markBookDeleted(book, Date.now(), deleteAction === 'purge');
           } else {
             // "Remove from Device Only" must never leave stale authorization
             // from an older delete/re-import cycle on the live row.

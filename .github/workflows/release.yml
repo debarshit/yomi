@@ -553,7 +553,7 @@ jobs:
           # ("Not Found") into latest.json and clobbering the release asset with
           # invalid JSON, which then breaks tauri-action's updater merge on every
           # subsequent build.
-          if ! curl -fsSL https://github.com/debarshit/readest/releases/latest/download/latest.json -o latest.json; then
+          if ! curl -fsSL https://github.com/debarshit/yomi/releases/latest/download/latest.json -o latest.json; then
             echo "::error::Failed to download existing latest.json; aborting to avoid clobbering the release asset."
             exit 1
           fi
@@ -563,8 +563,8 @@ jobs:
           fi
 
           version=${{ needs.get-release.outputs.release_version }}
-          universial_apk_url="https://github.com/debarshit/readest/releases/download/${{ needs.get-release.outputs.release_tag }}/Yomi_${version}_universal.apk"
-          arm64_apk_url="https://github.com/debarshit/readest/releases/download/${{ needs.get-release.outputs.release_tag }}/Yomi_${version}_arm64.apk"
+          universial_apk_url="https://github.com/debarshit/yomi/releases/download/${{ needs.get-release.outputs.release_tag }}/Yomi_${version}_universal.apk"
+          arm64_apk_url="https://github.com/debarshit/yomi/releases/download/${{ needs.get-release.outputs.release_tag }}/Yomi_${version}_arm64.apk"
 
           universial_sig=$(cat Yomi_${version}_universal.apk.sig)
           arm64_sig=$(cat Yomi_${version}_arm64.apk.sig)
@@ -716,7 +716,7 @@ jobs:
           # ("Not Found") into latest.json and clobbering the release asset with
           # invalid JSON, which then breaks tauri-action's updater merge on every
           # subsequent build.
-          if ! curl -fsSL https://github.com/debarshit/readest/releases/latest/download/latest.json -o latest.json; then
+          if ! curl -fsSL https://github.com/debarshit/yomi/releases/latest/download/latest.json -o latest.json; then
             echo "::error::Failed to download existing latest.json; aborting to avoid clobbering the release asset."
             exit 1
           fi
@@ -739,7 +739,7 @@ jobs:
             exit 1
           fi
 
-          portable_url="https://github.com/debarshit/readest/releases/download/${{ needs.get-release.outputs.release_tag }}/$bin_file"
+          portable_url="https://github.com/debarshit/yomi/releases/download/${{ needs.get-release.outputs.release_tag }}/$bin_file"
           portable_sig=$(cat $bin_file.sig)
 
           jq --arg url "$portable_url" \

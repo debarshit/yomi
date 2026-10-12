@@ -59,7 +59,7 @@ pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
     } else if event.id() == "privacy_policy" {
         let _ = opener.open_url("https://biblophile.com/privacy", None::<&str>);
     } else if event.id() == "report_issue" {
-        let _ = opener.open_url("https://github.com/debarshit/readest/issues", None::<&str>);
+        let _ = opener.open_url("https://github.com/debarshit/yomi/issues", None::<&str>);
     } else if event.id() == "yomi_help" || event.id() == "readest_help" {
         let _ = opener.open_url("https://biblophile.com/yomi/support", None::<&str>);
     }

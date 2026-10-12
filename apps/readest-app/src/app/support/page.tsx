@@ -181,7 +181,7 @@ export default function SupportPage() {
               </p>
             </div>
             <a
-              href='https://github.com/debarshit/readest/issues'
+              href='https://github.com/debarshit/yomi/issues'
               target='_blank'
               rel='noreferrer'
               className='inline-flex items-center justify-between px-3.5 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-xs font-semibold text-neutral-900 dark:text-neutral-100 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors'
@@ -245,7 +245,7 @@ export default function SupportPage() {
               Terms of Service
             </a>
             <a
-              href='https://github.com/debarshit/readest'
+              href='https://github.com/debarshit/yomi'
               target='_blank'
               rel='noreferrer'
               className='hover:underline'

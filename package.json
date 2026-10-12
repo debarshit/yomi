@@ -1,7 +1,7 @@
 {
   "name": "@readest/monorepo",
   "private": true,
-  "repository": "debarshit/readest",
+  "repository": "debarshit/yomi",
   "scripts": {
     "test": "pnpm --filter @readest/readest-app test",
     "test:lua": "pnpm --filter @readest/readest-app test:lua",

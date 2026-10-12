@@ -47,7 +47,7 @@ export const metadata: Metadata = {
   authors: [
     {
       name: 'biblophile',
-      url: 'https://github.com/debarshit/readest',
+      url: 'https://github.com/debarshit/yomi',
     },
   ],
   icons: {

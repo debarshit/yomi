@@ -53,9 +53,9 @@
   </keywords>
 
   <url type="homepage">https://biblophile.com/yomi</url>
-  <url type="bugtracker">https://github.com/debarshit/readest/issues</url>
+  <url type="bugtracker">https://github.com/debarshit/yomi/issues</url>
   <url type="help">https://biblophile.com/yomi/support</url>
-  <url type="vcs-browser">https://github.com/debarshit/readest</url>
+  <url type="vcs-browser">https://github.com/debarshit/yomi</url>
 
   <launchable type="desktop-id">com.biblophile.yomi.desktop</launchable>
 

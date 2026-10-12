@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: Download release assets
         run: |
-          gh release download "${{ inputs.tag }}" --repo debarshit/readest --dir ./release-assets
+          gh release download "${{ inputs.tag }}" --repo debarshit/yomi --dir ./release-assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -57,7 +57,7 @@ jobs:
 
       - name: Modify latest.json download URLs
         run: |
-          GITHUB_BASE_URL="https://github.com/debarshit/readest/releases/download"
+          GITHUB_BASE_URL="https://github.com/debarshit/yomi/releases/download"
           YOMI_BASE_URL="https://biblophile.com/yomi/download/releases"
           sed -i "s#${GITHUB_BASE_URL}#${YOMI_BASE_URL}#g" ./release-assets/latest.json
 

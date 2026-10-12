@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 };
 
 const basePath = process.env['NEXT_PUBLIC_BASE_PATH'] || '';
-const GITHUB_RELEASES_URL = 'https://github.com/debarshit/readest/releases/latest';
+const GITHUB_RELEASES_URL = 'https://github.com/debarshit/yomi/releases/latest';
 
 export default function DownloadPage() {
   return (
@@ -367,7 +367,7 @@ export default function DownloadPage() {
               Terms of Service
             </a>
             <a
-              href='https://github.com/debarshit/readest'
+              href='https://github.com/debarshit/yomi'
               target='_blank'
               rel='noreferrer'
               className='hover:underline'

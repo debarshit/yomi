@@ -198,9 +198,24 @@ export default function EmailPasswordAuth({
           setMessage(_('Verification successful. Redirecting...'));
         }
       } else {
-        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
-        if (error) setError(error.message);
-        else setMessage(_('Check your email for the password reset link'));
+        try {
+          const res = await fetch(`${apiUrl}/auth/forgot-password`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email }),
+          });
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.message || _('Failed to send reset instructions.'));
+          }
+
+          setMessage(_('Check your email for the password reset link'));
+        } catch (err: any) {
+          setError(err.message || _('Failed to send reset instructions. Please try again.'));
+        }
       }
     } finally {
       setLoading(false);

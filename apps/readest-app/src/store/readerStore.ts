@@ -23,7 +23,12 @@ import type { FileSystem } from '@/types/system';
 import { isFeedBookUrl, parseFeedBookUrl } from '@/services/rss/feedBookUrl';
 import { openFeedBookDoc } from '@/services/rss/feedReader';
 import { computeBookNav, hydrateBookNav, isBookNavCacheCurrent, updateToc } from '@/services/nav';
-import { formatTitle, getMetadataHash, getPrimaryLanguage } from '@/utils/book';
+import {
+  formatTitle,
+  getMetadataHash,
+  getPrimaryLanguage,
+  parseSeriesPosition,
+} from '@/utils/book';
 import { getBaseFilename } from '@/utils/path';
 import { SUPPORTED_LANGNAMES } from '@/services/constants';
 import { useSettingsStore } from './settingsStore';
@@ -55,6 +60,8 @@ interface ViewState {
   /* True while an Auto Scroll session (#4998) is engaged for this view;
      session-only, never persisted. Drives the View menu checkmark. */
   autoScrollEnabled: boolean;
+  /* True while drawing mode is on for this view; session-only. */
+  drawingEnabled: boolean;
   syncing: boolean;
   gridInsets: Insets | null;
   /* True while the reader is showing a position requested by an external
@@ -83,6 +90,7 @@ interface ReaderStore {
   setBottomBarTab: (tab: string) => void;
   setBookmarkRibbonVisibility: (key: string, visible: boolean) => void;
   setTTSEnabled: (key: string, enabled: boolean) => void;
+  setDrawingEnabled: (key: string, enabled: boolean) => void;
   setAutoScrollEnabled: (key: string, enabled: boolean) => void;
   setIsLoading: (key: string, loading: boolean) => void;
   setIsSyncing: (key: string, syncing: boolean) => void;
@@ -197,6 +205,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           ribbonVisible: false,
           ttsEnabled: false,
           autoScrollEnabled: false,
+          drawingEnabled: false,
           syncing: false,
           gridInsets: null,
           previewMode: false,
@@ -339,17 +348,20 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       // Filter out invalid booknotes
       config.booknotes = config.booknotes?.filter((booknote) => booknote.cfi) ?? [];
       // Load cached book navigation (TOC + section fragments) or compute and persist.
+      // Feed manifests grow between opens, so feed books always recompute instead.
       if (book.format === 'EPUB' && bookDoc.rendition?.layout !== 'pre-paginated') {
-        const cachedNav = await appService.loadBookNav(book);
+        const cachedNav = isFeed ? null : await appService.loadBookNav(book);
         if (isBookNavCacheCurrent(cachedNav) && process.env.NODE_ENV === 'production') {
           hydrateBookNav(bookDoc, cachedNav);
         } else {
           const freshNav = await computeBookNav(bookDoc);
           hydrateBookNav(bookDoc, freshNav);
-          try {
-            await appService.saveBookNav(book, freshNav);
-          } catch (e) {
-            console.warn('Failed to persist book nav cache:', e);
+          if (!isFeed) {
+            try {
+              await appService.saveBookNav(book, freshNav);
+            } catch (e) {
+              console.warn('Failed to persist book nav cache:', e);
+            }
           }
         }
       }
@@ -380,7 +392,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
         if (series) {
           book.metadata.series = book.metadata.series ?? formatTitle(series.name);
           book.metadata.seriesIndex =
-            book.metadata.seriesIndex ?? parseFloat(series.position || '0');
+            book.metadata.seriesIndex ?? parseSeriesPosition(series.position);
           book.metadata.seriesTotal =
             book.metadata.seriesTotal ?? (series.total ? parseInt(series.total, 10) : undefined);
         }
@@ -442,6 +454,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
             ribbonVisible: false,
             ttsEnabled: false,
             autoScrollEnabled: false,
+            drawingEnabled: false,
             syncing: false,
             gridInsets: null,
             previewMode: false,
@@ -466,6 +479,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
             ribbonVisible: false,
             ttsEnabled: false,
             autoScrollEnabled: false,
+            drawingEnabled: false,
             syncing: false,
             gridInsets: null,
             previewMode: false,
@@ -614,6 +628,17 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
         [key]: {
           ...state.viewStates[key]!,
           ttsEnabled: enabled,
+        },
+      },
+    })),
+
+  setDrawingEnabled: (key: string, enabled: boolean) =>
+    set((state) => ({
+      viewStates: {
+        ...state.viewStates,
+        [key]: {
+          ...state.viewStates[key]!,
+          drawingEnabled: enabled,
         },
       },
     })),

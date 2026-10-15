@@ -7,6 +7,10 @@ val storeFlavor = (project.findProperty("storeFlavor") as? String)?.takeIf { it.
     ?: System.getenv("STORE_FLAVOR")?.takeIf { it.isNotEmpty() }
     ?: "foss"
 
+val penFlavor = (project.findProperty("penFlavor") as? String)?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("PEN_FLAVOR")?.takeIf { it.isNotEmpty() }
+    ?: "genericPen"
+
 android {
     namespace = "com.readest.native_bridge"
     compileSdk = 36
@@ -38,12 +42,31 @@ android {
 
     sourceSets {
         getByName("main") {
-            java.srcDirs("src/main/java", "src/$storeFlavor/java")
+            java.srcDirs(
+                "src/main/java",
+                "src/$storeFlavor/java",
+                "src/$penFlavor/java"
+            )
         }
     }
 }
 
+// Default builds never declare (or contact) the BOOX repository. The app
+// module declares it too, as consumers resolve with their own repositories.
+if (penFlavor == "booxPen" || findProperty("penFlavor") == "booxPen") {
+    repositories {
+        maven { url = uri("https://repo.boox.com/repository/maven-public/") }
+    }
+}
+
 dependencies {
+    if (penFlavor == "booxPen") {
+        implementation("com.onyx.android.sdk:onyxsdk-pen:1.4.11") {
+            // An old transitive dependency (easypermissions) drags in the pre-AndroidX
+            // support library, which clashes with androidx.core.
+            exclude(group = "com.android.support")
+        }
+    }
     if (storeFlavor == "googleplay") {
         implementation("com.android.billingclient:billing:9.1.0")
         implementation("com.google.android.gms:play-services-base:18.5.0")

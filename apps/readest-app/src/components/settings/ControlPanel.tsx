@@ -143,6 +143,7 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
       disablePullDownToBookmark: setDisablePullDownToBookmark,
       swapClickArea: setSwapClickArea,
       animated: setAnimated,
+      pageTurnStyle: setPageTurnStyle,
       isEink: setIsEink,
       einkAutoRefreshInterval: setEinkAutoRefreshInterval,
       allowScript: setAllowScript,

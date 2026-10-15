@@ -53,6 +53,10 @@ export const getAPIBaseUrl = () => {
 
 const isWebDevMode = () => process.env['NODE_ENV'] === 'development' && isWebAppPlatform();
 
+// Readest Voice synthesizes on the production GPU service, which a local dev
+// server cannot reach: its routes use the production Web API even under
+// `pnpm dev-web` (a self-hosted apiBaseUrl still applies).
+export const getReadestVoiceAPIBaseUrl = () => `${getBaseUrl()}/api`;
 // For Node.js API that currently not supported in some edge runtimes
 export const getNodeAPIBaseUrl = () =>
   isWebDevMode() ? `${process.env['NEXT_PUBLIC_BASE_PATH'] || ''}/api` : `${getNodeBaseUrl()}/api`;

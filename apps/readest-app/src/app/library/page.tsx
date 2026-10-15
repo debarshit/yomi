@@ -244,7 +244,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
 
   // Library page pulls user replicas (dictionaries, custom fonts,
   // background textures, OPDS catalogs, Audiobookshelf servers, custom
-  // translators + prompts, bundled settings). Deferred 10s; module-scoped
+  // translators + prompts, custom TTS services, bundled settings). Deferred 10s; module-scoped
   // dedup means a later navigation to the reader won't re-pull the same kind.
   useReplicaPull({
     kinds: [
@@ -255,6 +255,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       'abs_server',
       'custom_translator',
       'translation_prompt',
+      'custom_tts',
       'settings',
       'bookshelf',
     ],

@@ -65,10 +65,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = useCallback(async () => {
     console.log('Logging out from Biblophile/Supabase account');
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.refreshSession();
     } catch (e) {
-      console.warn('Supabase sign-out failed:', e);
+      console.warn('Supabase refreshSession failed:', e);
     } finally {
+      await supabase.auth.signOut({ scope: 'local' });
       posthog.reset();
       localStorage.removeItem('token');
       localStorage.removeItem('refresh_token');

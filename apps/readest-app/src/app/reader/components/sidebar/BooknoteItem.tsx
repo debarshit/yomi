@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import React, { useMemo, useRef } from 'react';
+import React, { useContext, useMemo, useRef } from 'react';
 import { MdEdit, MdDelete, MdContentCopy } from 'react-icons/md';
 import { PiBookmarkSimple, PiHighlighter, PiNotePencil, PiScribbleLoop } from 'react-icons/pi';
 
@@ -9,7 +9,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useNotebookStore } from '@/store/notebookStore';
 import { useBookDataStore } from '@/store/bookDataStore';
-import { useAuth } from '@/context/AuthContext';
+import { AuthContext } from '@/context/AuthContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { useLongPress } from '@/hooks/useLongPress';
@@ -58,7 +58,8 @@ const BooknoteItem: React.FC<BooknoteItemProps> = ({
   const { getConfig, saveConfig, updateBooknotes } = useBookDataStore();
   const { getProgress, getView, getViewsById, getViewSettings } = useReaderStore();
   const { setNotebookEditAnnotation, setNotebookVisible } = useNotebookStore();
-  const { user } = useAuth();
+  const auth = useContext(AuthContext);
+  const user = auth?.user;
 
   const isOtherUserAnnotation = useMemo(() => {
     const annot = item as any;

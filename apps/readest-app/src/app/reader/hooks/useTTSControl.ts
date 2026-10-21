@@ -25,6 +25,7 @@ import { genSSMLRaw, parseSSMLLang } from '@/utils/ssml';
 import { throttle } from '@/utils/throttle';
 import { isCfiInLocation } from '@/utils/cfi';
 import { getLocale } from '@/utils/misc';
+import { getPDFSpeechLang } from '@/utils/lang';
 import { estimateTTSTime } from '@/utils/ttsTime';
 import { pageBreakFraction } from '@/utils/ttsPageFollow';
 import { getTextSubRange, rangeTextExcludingInert } from '@/services/tts/wordHighlight';
@@ -51,6 +52,12 @@ const PAGE_FOLLOW_INTERVAL_MS = 200;
 // Cadence of the buffering probe. Fast enough that a spinner appears with the
 // stall rather than after it, slow enough to cost nothing over a long session.
 const TTS_BUFFERING_POLL_MS = 400;
+
+// Following the voice turns the page and focuses the spoken text inside the
+// book's iframe, which takes the caret (and an IME composition) out of a note
+// being typed and closes its popup (#6837). The view holds still while a note
+// editor has focus; the next mark catches up once it loses focus.
+const isTypingNote = () => !!document.activeElement?.hasAttribute('data-note-editor');
 
 export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProps) => {
   const _ = useTranslation();
@@ -455,6 +462,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
         }
         const contents = currentView.renderer.getContents();
         if (contents.some(({ doc }) => (doc.getSelection()?.toString().length ?? 0) > 0)) return;
+        if (isTypingNote()) return;
 
         const progress = controller.getSentenceProgress();
         if (progress === null) {
@@ -491,6 +499,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
       if (!preview) {
         viewSettings.ttsLocation = cfi;
         setViewSettings(bookKey, viewSettings);
+        if (isTypingNote()) return;
       }
 
       const hlContents = view.renderer.getContents();
@@ -578,7 +587,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
     const handleHighlightWord = (e: Event) => {
       const { cfi } = (e as CustomEvent<{ cfi: string }>).detail;
       const view = getView(bookKey);
-      if (!cfi || !view || !followingTTSLocationRef.current) return;
+      if (!cfi || !view || !followingTTSLocationRef.current || isTypingNote()) return;
 
       const hlContents = view.renderer.getContents();
       const hlPrimaryIdx = view.renderer.primaryIndex;
@@ -803,7 +812,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
   // Section change callback
   const handleSectionChange = useCallback(
     async (sectionIndex: number) => {
-      if (!followingTTSLocationRef.current) return;
+      if (!followingTTSLocationRef.current || isTypingNote()) return;
       const view = getView(bookKey);
       const sections = view?.book.sections;
       if (!sections || sectionIndex < 0 || sectionIndex >= sections.length) return;
@@ -957,8 +966,6 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
         }
       }
 
-      const primaryLang = bookData.book.primaryLanguage;
-
       if (ttsControllerRef.current) {
         ttsControllerRef.current.stop();
         ttsControllerRef.current = null;
@@ -1039,6 +1046,14 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
           void ttsController.shutdown();
           return;
         }
+        const speechSection = view.renderer.getContents().find((x) => x.index === ttsFromIndex);
+        const primaryLang =
+          bookData.book.format === 'PDF'
+            ? getPDFSpeechLang(
+                bookData.book.primaryLanguage,
+                speechSection?.doc.body?.textContent || '',
+              )
+            : bookData.book.primaryLanguage;
         ttsController.sentenceTint = !viewSettings.isEink;
         ttsController.updateHighlightOptions(
           getTTSHighlightOptions(

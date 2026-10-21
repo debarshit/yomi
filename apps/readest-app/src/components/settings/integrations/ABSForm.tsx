@@ -17,6 +17,8 @@ import { parseAbsFilePath } from '@/utils/audiobook';
 import { eventDispatcher } from '@/utils/event';
 import SubPageHeader from '../SubPageHeader';
 import { BoxedList, NavigationRow, SectionTitle, SettingsSwitchRow, Tips } from '../primitives';
+import { allowsSelfSignedCert } from '@/utils/tls';
+import SelfSignedCertSwitch from './SelfSignedCertSwitch';
 
 interface ABSFormProps {
   onBack: () => void;
@@ -45,6 +47,7 @@ const ABSForm: React.FC<ABSFormProps> = ({ onBack }) => {
   const [password, setPassword] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectError, setConnectError] = useState('');
+  const [allowSelfSignedCert, setAllowSelfSignedCert] = useState(true);
 
   const activeServer = servers.find((server) => server.id === activeServerId);
 
@@ -71,6 +74,7 @@ const ABSForm: React.FC<ABSFormProps> = ({ onBack }) => {
       url: trimmedUrl,
       username,
       password,
+      allowSelfSignedCert,
     };
     const probe: ABSServer = { id: computeAbsServerContentId(trimmedUrl), ...draft };
     let tokens: Pick<ABSServer, 'accessToken' | 'refreshToken' | 'serverVersion'> = {};
@@ -97,6 +101,7 @@ const ABSForm: React.FC<ABSFormProps> = ({ onBack }) => {
 
       setUrl('');
       setUsername('');
+      setAllowSelfSignedCert(true);
       setActiveServerId(added.id);
     } catch {
       setConnectError(
@@ -172,6 +177,11 @@ const ABSForm: React.FC<ABSFormProps> = ({ onBack }) => {
                   }}
                 />
               </div>
+
+              <SelfSignedCertSwitch
+                checked={allowSelfSignedCert}
+                onChange={() => setAllowSelfSignedCert(!allowSelfSignedCert)}
+              />
 
               <div className='space-y-1.5'>
                 <SectionTitle as='label' htmlFor='abs-username' className='block'>
@@ -331,6 +341,13 @@ const ABSServerDetail: React.FC<ABSServerDetailProps> = ({
     persist();
   };
 
+  const handleToggleSelfSignedCert = () => {
+    useABSServerStore
+      .getState()
+      .updateServer(server.id, { allowSelfSignedCert: !allowsSelfSignedCert(server) });
+    persist();
+  };
+
   const handleSyncNow = () => {
     void eventDispatcher.dispatch('sync-abs-servers', {});
   };
@@ -395,6 +412,11 @@ const ABSServerDetail: React.FC<ABSServerDetailProps> = ({
           value={server.url}
         />
       </div>
+
+      <SelfSignedCertSwitch
+        checked={allowsSelfSignedCert(server)}
+        onChange={handleToggleSelfSignedCert}
+      />
 
       <div className='space-y-0.5 px-4'>
         {server.serverVersion && (

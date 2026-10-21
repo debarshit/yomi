@@ -150,7 +150,7 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
               onChange={handleSearchChange}
               spellCheck='false'
               className={clsx(
-                'search-input input h-9 w-full rounded-full pe-[30%] ps-10 sm:h-7',
+                'window-drag-input search-input input h-9 w-full rounded-full pe-[30%] ps-10 sm:h-7',
                 'bg-base-300/45 border-0',
                 'font-sans text-sm font-light',
                 'placeholder:text-base-content/50 truncate',
@@ -254,6 +254,15 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                 {isSelectAll ? _('Deselect') : _('Select All')}
               </span>
             </button>
+            {/* Mounted without buttons so the header still drags the window (#6917). */}
+            {appService?.hasWindowBar && (
+              <WindowButtons
+                headerRef={headerRef}
+                showMinimize={false}
+                showMaximize={false}
+                showClose={false}
+              />
+            )}
           </div>
         ) : (
           <div className='flex h-full items-center gap-x-2 sm:gap-x-4'>

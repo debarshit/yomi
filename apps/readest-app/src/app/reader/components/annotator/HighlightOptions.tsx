@@ -304,7 +304,7 @@ const HighlightOptions: React.FC<HighlightOptionsProps> = ({
               'not-eink:border-base-content/20 eink-bordered not-eink:shadow-sm flex flex-shrink-0 items-center justify-center rounded-full border p-0 transition-colors',
               'bg-base-300 theme-dark:bg-base-100',
               globalToggleActive
-                ? 'not-eink:text-primary'
+                ? 'not-eink:text-primary eink-contrast'
                 : 'not-eink:text-base-content/80 hover:not-eink:text-base-content',
             )}
             style={{ width: size30, height: size30 }}

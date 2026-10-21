@@ -1018,7 +1018,7 @@ export const READEST_PUBLIC_STORAGE_BASE_URL = YOMI_PUBLIC_STORAGE_BASE_URL;
 export const YOMI_PUBLIC_ASSETS_BASE_URL = 'https://biblophile.com/yomi/assets';
 export const READEST_PUBLIC_ASSETS_BASE_URL = YOMI_PUBLIC_ASSETS_BASE_URL;
 
-export const YOMI_OPDS_USER_AGENT = 'Yomi/1.0 (OPDS Browser)';
+export const YOMI_OPDS_USER_AGENT = 'Readest/1.0 (OPDS Browser)';
 export const READEST_OPDS_USER_AGENT = YOMI_OPDS_USER_AGENT;
 
 export const SYNC_PROGRESS_INTERVAL_SEC = 3;

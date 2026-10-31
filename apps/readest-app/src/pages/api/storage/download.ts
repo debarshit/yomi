@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from '@/utils/supabase';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
 import { getDownloadSignedUrl, objectExists } from '@/utils/object';
 import { validateUserAndToken } from '@/utils/access';
+import { parseBookFileKey } from '@/utils/bookFileKey';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await runMiddleware(req, res, corsAllMethods);
@@ -136,6 +137,10 @@ async function processFileKeys(
           const fileExtension = filename.split('.').pop() || '';
           const isCover = filename === 'cover.png';
           return { originalKey: key, bookHash, fileExtension, isCover };
+        }
+        const parsed = parseBookFileKey(key);
+        if (parsed) {
+          return { originalKey: key, ...parsed, isCover: false };
         }
         return null;
       })

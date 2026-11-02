@@ -67,7 +67,19 @@ vi.mock('next/image', () => ({
 vi.mock('@/components/SupportLinks', () => ({ default: () => null }));
 vi.mock('@/components/LegalLinks', () => ({ default: () => null }));
 vi.mock('@/components/Link', () => ({
-  default: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  default: ({
+    href,
+    children,
+    ...props
+  }: {
+    href?: string;
+    children: ReactNode;
+    [key: string]: unknown;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock('@/components/Dialog', () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -160,5 +172,28 @@ describe('AboutWindow version label', () => {
 
     expect(label.tagName).toBe('BUTTON');
     expect(label.getAttribute('title')).toBe('Copy');
+  });
+});
+
+describe('AboutWindow licensing and attribution', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders copyright, Readest attribution, AGPL license, and GitHub source code link', async () => {
+    await openDialog();
+
+    expect(screen.getByText(/Biblophile & Readest contributors/)).toBeDefined();
+
+    const readestLink = screen.getByRole('link', { name: 'Readest' });
+    expect(readestLink.getAttribute('href')).toBe('https://github.com/readest/readest');
+
+    const licenseLink = screen.getByRole('link', {
+      name: /GNU Affero General Public License v3\.0/,
+    });
+    expect(licenseLink.getAttribute('href')).toBe('https://www.gnu.org/licenses/agpl-3.0.html');
+
+    const githubLink = screen.getByRole('link', { name: 'GitHub' });
+    expect(githubLink.getAttribute('href')).toBe('https://github.com/debarshit/yomi/tree/working');
   });
 });

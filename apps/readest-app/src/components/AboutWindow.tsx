@@ -16,6 +16,7 @@ import { BRAND_NAME, BRAND_FULL_NAME } from '@/services/branding';
 import SupportLinks from './SupportLinks';
 import LegalLinks from './LegalLinks';
 import Dialog from './Dialog';
+import Link from './Link';
 
 export const setAboutDialogVisible = (visible: boolean) => {
   const dialog = document.getElementById('about_window');
@@ -181,13 +182,33 @@ export const AboutWindow = () => {
             <p className='text-neutral-content text-sm'>
               © {new Date().getFullYear()} Biblophile. All rights reserved.
             </p>
-            {/* <p className='text-neutral-content text-xs'>
+            <p className='text-neutral-content text-xs'>
+              Forked from the open-source{' '}
+              <Link href='https://github.com/readest/readest' className='text-blue-500 underline'>
+                Readest
+              </Link>{' '}
+              project.
+            </p>
+            <p className='text-neutral-content text-xs'>
+              This software is licensed under the{' '}
+              <Link
+                href='https://www.gnu.org/licenses/agpl-3.0.html'
+                className='text-blue-500 underline'
+              >
+                GNU Affero General Public License v3.0
+              </Link>
+              .
+            </p>
+            <p className='text-neutral-content text-xs'>
               Source code is available at{' '}
-              <Link href='https://github.com/debarshit/yomi/tree/working' className='text-blue-500 underline'>
+              <Link
+                href='https://github.com/debarshit/yomi/tree/working'
+                className='text-blue-500 underline'
+              >
                 GitHub
               </Link>
               .
-            </p> */}
+            </p>
             <LegalLinks />
           </div>
           <SupportLinks />

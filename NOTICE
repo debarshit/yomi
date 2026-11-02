@@ -1,0 +1,49 @@
+Yomi
+Copyright (C) 2026 Biblophile
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+------------------------------------------------------------------------
+Upstream Project & Modifications Notice (AGPL-3.0 Section 5)
+------------------------------------------------------------------------
+
+Yomi is a derivative work forked from the Readest project:
+Upstream repository: https://github.com/readest/readest
+Original project Copyright (C) 2024-2026 Readest Authors and Bilingify LLC.
+Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+
+Modifications made by Biblophile beginning in 2026 include:
+- Rebranding and custom UI styling
+- Integration with Biblophile cloud services, authentication, and progress syncing
+- Configuration and platform-specific adjustments
+
+Source code for Yomi is available at:
+https://github.com/debarshit/yomi/tree/working
+
+------------------------------------------------------------------------
+Third-Party Software Credits
+------------------------------------------------------------------------
+
+Yomi incorporates or uses the following open-source software:
+
+- Readest: AGPL-3.0 (https://github.com/readest/readest)
+- foliate-js: MIT License (https://github.com/johnfactotum/foliate-js)
+- PDF.js: Apache License 2.0 (https://github.com/mozilla/pdf.js)
+- Tauri: MIT or Apache-2.0 License (https://github.com/tauri-apps/tauri)
+- Next.js: MIT License (https://github.com/vercel/next.js)
+- React: MIT License (https://github.com/facebook/react)
+- zip.js: BSD-3-Clause License (https://github.com/gildas-lormeau/zip.js)
+- fflate: MIT License (https://github.com/101arrowz/fflate)
+- daisyUI: MIT License (https://github.com/saadeghi/daisyui)
+- marked: MIT License (https://github.com/markedjs/marked)

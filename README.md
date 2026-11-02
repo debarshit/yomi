@@ -67,9 +67,14 @@ Yomi runs wherever you do. Get the latest version for your platform below:
 
 ## 📄 License & Credits
 
-Yomi is free and open-source software, licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. 
+Yomi is free and open-source software, licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See the [LICENSE](LICENSE) and [NOTICE](NOTICE) files for details.
+
+Yomi is forked from the [Readest](https://github.com/readest/readest) project, originally created by Nicholas Gasior and Readest contributors, licensed under AGPL-3.0.
+
+Source code is available at: [https://github.com/debarshit/yomi/tree/working](https://github.com/debarshit/yomi/tree/working).
 
 ### Core Open-Source Libraries Used:
+*   [Readest](https://github.com/readest/readest) — The parent project upon which Yomi is built (AGPL-3.0).
 *   [foliate-js](https://github.com/johnfactotum/foliate-js) — Ebook rendering engine (MIT License).
 *   [Tauri](https://github.com/tauri-apps/tauri) — Desktop/Mobile shell framework (MIT/Apache-2.0 License).
 *   [Next.js](https://github.com/vercel/next.js) — Interface framework (MIT License).

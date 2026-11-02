@@ -34,7 +34,13 @@ import { getBaseFilename } from '@/utils/path';
 import { SUPPORTED_LANGNAMES } from '@/services/constants';
 import { useSettingsStore } from './settingsStore';
 import { BookData, useBookDataStore } from './bookDataStore';
-import { trackReaderBookOpened, captureEvent } from '@/utils/telemetry';
+import {
+  trackReaderBookOpened,
+  trackReadingSessionEnded,
+  trackReadingProgress,
+  trackReaderFeatureUsed,
+  captureEvent,
+} from '@/utils/telemetry';
 import { useLibraryStore } from './libraryStore';
 import { clearBookProgress, getBookProgress, setBookProgress } from './readerProgressStore';
 import { uniqueId } from '@/utils/misc';
@@ -43,6 +49,20 @@ import { getAccessToken } from '@/utils/access';
 import { isWebAppPlatform } from '@/services/environment';
 import { Book } from '@/types/book';
 import { getWidePages, type WidePagesOptions } from '@/utils/spread';
+
+interface ActiveReadingSession {
+  startTime: number;
+  startProgress: number;
+  startPage: number;
+  bookId: string;
+  title?: string;
+  format?: string;
+  author?: string;
+  lastProgressPercentage: number;
+  lastTrackedMilestone: number;
+  maxPageReached: number;
+}
+const activeReadingSessions = new Map<string, ActiveReadingSession>();
 
 interface ViewState {
   /* Unique key for each book view */
@@ -156,6 +176,28 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
   },
 
   clearViewState: (key: string) => {
+    // Flush reading session telemetry
+    const session = activeReadingSessions.get(key);
+    if (session) {
+      activeReadingSessions.delete(key);
+      const durationSeconds = Math.round((Date.now() - session.startTime) / 1000);
+      if (durationSeconds >= 5) {
+        const pagesRead = Math.max(0, session.maxPageReached - session.startPage);
+        trackReadingSessionEnded(
+          {
+            id: session.bookId,
+            title: session.title,
+            format: session.format,
+            author: session.author,
+          },
+          durationSeconds,
+          session.startProgress,
+          session.lastProgressPercentage,
+          pagesRead,
+        );
+      }
+    }
+
     // Drop the per-book progress entry alongside the view state so the
     // standalone progress store doesn't leak across opens/closes.
     clearBookProgress(key);
@@ -429,29 +471,48 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           [id]: newBookData,
         },
       }));
-      try {
-        const bookTitle =
-          typeof book.title === 'string'
-            ? book.title
-            : typeof bookDoc.metadata?.title === 'string'
-              ? bookDoc.metadata.title
-              : undefined;
-        const bookAuthor =
-          typeof book.author === 'string'
-            ? book.author
-            : typeof (bookDoc.metadata as any)?.author === 'string'
-              ? (bookDoc.metadata as any).author
-              : undefined;
 
+      const bookTitle =
+        typeof book.title === 'string'
+          ? book.title
+          : typeof bookDoc.metadata?.title === 'string'
+            ? bookDoc.metadata.title
+            : undefined;
+      const bookAuthor =
+        typeof book.author === 'string'
+          ? book.author
+          : typeof (bookDoc.metadata as any)?.author === 'string'
+            ? (bookDoc.metadata as any).author
+            : undefined;
+
+      try {
         trackReaderBookOpened({
           id,
           title: bookTitle,
           format: book.format,
           author: bookAuthor,
         });
+
+        const initialProg = getBookProgress(key);
+        const startProgVal = initialProg ? initialProg.fraction * 100 : 0;
+        const startPageVal = initialProg ? initialProg.page : 1;
+
+        activeReadingSessions.set(key, {
+          startTime: Date.now(),
+          startProgress: startProgVal,
+          startPage: startPageVal,
+          bookId: id,
+          title: bookTitle,
+          format: book.format,
+          author: bookAuthor,
+          lastProgressPercentage: startProgVal,
+          lastTrackedMilestone: Math.floor(startProgVal / 25) * 25,
+          maxPageReached: startPageVal,
+        });
       } catch (e) {
         // Telemetry failure should never affect reader initialization
       }
+
       const configViewSettings = config.viewSettings!;
       const globalViewSettings = settings.globalViewSettings;
       set((state) => ({
@@ -512,6 +573,27 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     const bookData = useBookDataStore.getState().booksData[id];
     const viewState = get().viewStates[key];
     if (!viewState || !bookData) return;
+
+    try {
+      const currentSettings = viewState.viewSettings;
+      if (currentSettings) {
+        if (viewSettings.fontFamily && viewSettings.fontFamily !== currentSettings.fontFamily) {
+          trackReaderFeatureUsed('font_change', {
+            font: viewSettings.fontFamily,
+            book_id: id,
+          });
+        }
+        if (viewSettings.theme && viewSettings.theme !== currentSettings.theme) {
+          trackReaderFeatureUsed('theme_change', {
+            theme: viewSettings.theme,
+            book_id: id,
+          });
+        }
+      }
+    } catch (e) {
+      // Telemetry should never affect settings updates
+    }
+
     if (viewState.isPrimary) {
       useBookDataStore.setState((state) => ({
         booksData: {
@@ -567,6 +649,22 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     const pageInfo = bookData.isFixedLayout ? section : pageinfo;
     const progress: [number, number] = [pageInfo.current + 1, pageInfo.total];
     const progressPercentage = Math.round((progress[0] / progress[1]) * 100);
+
+    // Track session progress milestones
+    const session = activeReadingSessions.get(key);
+    if (session) {
+      session.lastProgressPercentage = progressPercentage;
+      if (pageInfo.current + 1 > session.maxPageReached) {
+        session.maxPageReached = pageInfo.current + 1;
+      }
+      const currentMilestone = Math.floor(progressPercentage / 25) * 25;
+      if (currentMilestone > session.lastTrackedMilestone && currentMilestone <= 100) {
+        session.lastTrackedMilestone = currentMilestone;
+        try {
+          trackReadingProgress(id, progressPercentage, progress[0], progress[1]);
+        } catch (_) {}
+      }
+    }
 
     // Lightweight library update — O(1) lookup, no array copy, no refreshGroups
     const { getBookByHash, updateBookProgress } = useLibraryStore.getState();
@@ -641,7 +739,12 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       },
     })),
 
-  setTTSEnabled: (key: string, enabled: boolean) =>
+  setTTSEnabled: (key: string, enabled: boolean) => {
+    if (enabled) {
+      try {
+        trackReaderFeatureUsed('tts', { book_id: key.split('-')[0] });
+      } catch (_) {}
+    }
     set((state) => ({
       viewStates: {
         ...state.viewStates,
@@ -650,9 +753,15 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           ttsEnabled: enabled,
         },
       },
-    })),
+    }));
+  },
 
-  setDrawingEnabled: (key: string, enabled: boolean) =>
+  setDrawingEnabled: (key: string, enabled: boolean) => {
+    if (enabled) {
+      try {
+        trackReaderFeatureUsed('drawing', { book_id: key.split('-')[0] });
+      } catch (_) {}
+    }
     set((state) => ({
       viewStates: {
         ...state.viewStates,
@@ -661,9 +770,15 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           drawingEnabled: enabled,
         },
       },
-    })),
+    }));
+  },
 
-  setAutoScrollEnabled: (key: string, enabled: boolean) =>
+  setAutoScrollEnabled: (key: string, enabled: boolean) => {
+    if (enabled) {
+      try {
+        trackReaderFeatureUsed('auto_scroll', { book_id: key.split('-')[0] });
+      } catch (_) {}
+    }
     set((state) => ({
       viewStates: {
         ...state.viewStates,
@@ -672,7 +787,8 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           autoScrollEnabled: enabled,
         },
       },
-    })),
+    }));
+  },
 
   setIsLoading: (key: string, loading: boolean) =>
     set((state) => ({

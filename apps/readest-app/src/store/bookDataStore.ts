@@ -4,6 +4,7 @@ import { Book, BookConfig, BookFormat, BookNote } from '@/types/book';
 import { EnvConfigType } from '@/services/environment';
 import { BookDoc } from '@/libs/document';
 import { useLibraryStore } from './libraryStore';
+import { trackReaderFeatureUsed } from '@/utils/telemetry';
 
 // Throttle library.json writes triggered by per-book saveConfig.
 //
@@ -127,6 +128,19 @@ export const useBookDataStore = create<BookDataState>((set, get) => ({
         console.warn('No config found for book', id);
         return state;
       }
+      if (partialConfig.booknotes && Array.isArray(partialConfig.booknotes)) {
+        const prevCount = config.booknotes?.length || 0;
+        const newCount = partialConfig.booknotes.length;
+        if (newCount > prevCount) {
+          try {
+            trackReaderFeatureUsed('highlight', {
+              book_id: id,
+              new_notes: newCount - prevCount,
+              total_notes: newCount,
+            });
+          } catch (_) {}
+        }
+      }
       const update = partialConfig.booknotes
         ? { ...partialConfig, booknotes: discardUnanchoredBooknotes(partialConfig.booknotes) }
         : partialConfig;
@@ -188,6 +202,7 @@ export const useBookDataStore = create<BookDataState>((set, get) => ({
       const id = key.split('-')[0]!;
       const book = state.booksData[id];
       if (!book) return state;
+      const prevCount = book.config?.booknotes?.length || 0;
       const dedupedBooknotes = Array.from(
         new Map(
           discardUnanchoredBooknotes(booknotes).map((item) => [
@@ -196,6 +211,15 @@ export const useBookDataStore = create<BookDataState>((set, get) => ({
           ]),
         ).values(),
       );
+      if (dedupedBooknotes.length > prevCount) {
+        try {
+          trackReaderFeatureUsed('highlight', {
+            book_id: id,
+            new_notes: dedupedBooknotes.length - prevCount,
+            total_notes: dedupedBooknotes.length,
+          });
+        } catch (_) {}
+      }
       updatedConfig = {
         ...book.config,
         updatedAt: Date.now(),

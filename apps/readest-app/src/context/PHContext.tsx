@@ -3,7 +3,7 @@
 import posthog from 'posthog-js';
 import { ReactNode } from 'react';
 import { PostHogProvider } from 'posthog-js/react';
-import { applyPostHogConsent, getTelemetryDecision } from '@/utils/telemetry';
+import { applyPostHogConsent, hasOptedOutTelemetry } from '@/utils/telemetry';
 import { getAppVersion } from '@/utils/version';
 import { getOSPlatform } from '@/utils/misc';
 import { isTauriAppPlatform } from '@/services/environment';
@@ -33,8 +33,8 @@ export const initPostHog = () => {
     api_host: posthogUrl,
     person_profiles: 'always',
     autocapture: true,
-    // Opted out unless the user said yes. The decision is final at this point.
-    opt_out_capturing_by_default: getTelemetryDecision() !== 'opt-in',
+    // By default opt-in for unified ecosystem tracking unless explicitly opted out
+    opt_out_capturing_by_default: hasOptedOutTelemetry(),
     // Readest uses no feature flags, surveys, or session recordings. Their
     // loaders fetch remote assets even while capture is opted out, so turn
     // them off: an opted-out user then sends no request at all (issue #6422).

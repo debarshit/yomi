@@ -67,6 +67,7 @@ import { writeTextToClipboard } from '@/utils/clipboard';
 import { AnnotationLinkType, buildAnnotationUrl } from '@/utils/deeplink';
 import { DEFAULT_NOTE_EXPORT_CONFIG } from '@/services/constants';
 import { canShareText, shareSelectedText } from '@/utils/share';
+import { trackReaderFeatureUsed } from '@/utils/telemetry';
 import {
   getToolbarToolTypes,
   shouldShowHighlightOptions,
@@ -831,6 +832,10 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
               page: index + 1,
             });
             // Show translation popup preferentially for PDF right-click
+            trackReaderFeatureUsed('translation', {
+              book_id: bookKey.split('-')[0],
+              source: 'pdf_context_menu',
+            });
             setShowAnnotPopup(false);
             setShowDeepLPopup(true);
             setShowDictionaryPopup(false);
@@ -1564,6 +1569,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
 
   const handleCopy = (dismissPopup = true) => {
     if (!selection || !selection.text) return;
+    trackReaderFeatureUsed('copy', { book_id: bookKey.split('-')[0] });
     const textToCopy = selection.text;
     setTimeout(() => {
       // Delay to ensure it won't be overridden by system clipboard actions
@@ -1657,6 +1663,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
 
   const handleShare = () => {
     if (!selection?.text) return;
+    trackReaderFeatureUsed('share', { book_id: bookKey.split('-')[0] });
     const position = trianglePosition
       ? {
           x: trianglePosition.point.x,
@@ -1670,6 +1677,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
 
   const handleQuoteCard = async () => {
     if (!selection?.text) return;
+    trackReaderFeatureUsed('quote_card', { book_id: bookKey.split('-')[0] });
     // The card shows the passage as rendered, without hidden translations or
     // the source's formatting newlines.
     const runs = getRenderedRunsFromRange(selection.range);
@@ -2045,6 +2053,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
   const handleSaveNote = async (note: string) => {
     if (!noteEditorTarget) return;
     if (!(await saveBooknoteNoteText(noteEditorTarget.annotationId, note))) return;
+    trackReaderFeatureUsed('note', { book_id: bookKey.split('-')[0] });
     // The placeholder carries a note now — a real annotation, not a leftover.
     pendingNotePlaceholdersRef.current = [];
     setNoteEditorTarget(null);
@@ -2059,6 +2068,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
 
   const handleSearch = () => {
     if (!selection || !selection.text) return;
+    trackReaderFeatureUsed('search', { book_id: bookKey.split('-')[0] });
     handleDismissPopupAndSelection();
 
     let term = selection.text;
@@ -2071,6 +2081,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
 
   const handleDictionary = () => {
     if (!selection || !selection.text) return;
+    trackReaderFeatureUsed('dictionary', { book_id: bookKey.split('-')[0] });
     // System-dictionary path: when the user has opted in via Settings →
     // Languages → Dictionaries, hand the selection to the OS instead of
     // opening the in-app popup. Exclusivity is enforced at the store
@@ -2099,6 +2110,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
 
   const handleTranslation = () => {
     if (!selection || !selection.text) return;
+    trackReaderFeatureUsed('translation', { book_id: bookKey.split('-')[0] });
     setShowAnnotPopup(false);
     void suppressNativeSelectionHandles();
     setShowDeepLPopup(true);
@@ -2125,6 +2137,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
   };
 
   const handleProofread = () => {
+    trackReaderFeatureUsed('proofread', { book_id: bookKey.split('-')[0] });
     // With no active selection the shortcut (Ctrl/Cmd+P) has nothing to turn
     // into a rule, so reuse it to open the replacement-rules manager instead.
     if (!selection || !selection.text) {

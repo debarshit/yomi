@@ -9,6 +9,7 @@ export type TelemetryDecision = 'opt-in' | 'opt-out' | 'pending';
 export const TELEMETRY_PROMPT_BUCKET_RATE = 0.1;
 
 export const hasOptedOutTelemetry = () => {
+  if (typeof window === 'undefined') return false;
   return localStorage.getItem(TELEMETRY_OPT_OUT_KEY) === 'true';
 };
 
@@ -65,18 +66,92 @@ export const trackReadingProgress = (
 export const trackReaderFeatureUsed = (
   feature:
     | 'tts'
+    | 'auto_scroll'
+    | 'drawing'
     | 'highlight'
     | 'note'
     | 'dictionary'
     | 'translation'
     | 'font_change'
     | 'theme_change'
-    | 'search',
+    | 'search'
+    | 'copy'
+    | 'share'
+    | 'quote_card'
+    | 'proofread'
+    | (string & {}),
   details?: Record<string, unknown>,
 ) => {
   captureEvent('reader_feature_used', {
     feature_name: feature,
     ...details,
+  });
+};
+
+export const trackReadingSessionEnded = (
+  book: {
+    id?: string;
+    title?: string;
+    format?: string;
+    author?: string;
+  },
+  durationSeconds: number,
+  startProgress?: number,
+  endProgress?: number,
+  pagesRead?: number,
+) => {
+  captureEvent('reading_session_ended', {
+    book_id: book.id,
+    title: book.title,
+    format: book.format,
+    author: book.author,
+    duration_seconds: durationSeconds,
+    duration_minutes: Math.round((durationSeconds / 60) * 10) / 10,
+    start_progress: startProgress != null ? Math.round(startProgress * 100) / 100 : undefined,
+    end_progress: endProgress != null ? Math.round(endProgress * 100) / 100 : undefined,
+    pages_read: pagesRead,
+  });
+};
+
+export const trackBookImported = (book: {
+  id?: string;
+  title?: string;
+  format?: string;
+  source?: string;
+}) => {
+  captureEvent('book_imported', {
+    book_id: book.id,
+    title: book.title,
+    format: book.format,
+    source: book.source || 'local',
+  });
+};
+
+export const trackBooksBatchImported = (
+  count: number,
+  formats: Record<string, number>,
+  source?: string,
+) => {
+  captureEvent('books_batch_imported', {
+    count,
+    formats,
+    source: source || 'local',
+  });
+};
+
+export const trackLibraryStats = (stats: {
+  totalBooks: number;
+  formats: Record<string, number>;
+  finishedBooks: number;
+  readingBooks: number;
+  unreadBooks: number;
+}) => {
+  captureEvent('library_stats', {
+    total_books: stats.totalBooks,
+    formats: stats.formats,
+    finished_books: stats.finishedBooks,
+    reading_books: stats.readingBooks,
+    unread_books: stats.unreadBooks,
   });
 };
 
@@ -106,10 +181,11 @@ export const optOutTelemetry = () => {
  * boot, so an opt-in is restored without the SDK's default `$opt_in` event.
  */
 export const applyPostHogConsent = () => {
-  if (getTelemetryDecision() === 'opt-in') {
-    posthog.opt_in_capturing({ captureEventName: false });
-  } else {
+  const decision = getTelemetryDecision();
+  if (decision === 'opt-out' || decision === 'pending' || hasOptedOutTelemetry()) {
     posthog.opt_out_capturing();
+  } else {
+    posthog.opt_in_capturing({ captureEventName: false });
   }
 };
 

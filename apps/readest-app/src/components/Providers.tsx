@@ -45,20 +45,12 @@ import { cryptoSession } from '@/libs/crypto/session';
 import { useAppLockStore } from '@/store/appLockStore';
 import { initSettingsSync } from '@/services/sync/replicaSettingsSync';
 
-// One-time, on first launch after this feature ships, decide how to handle
-// PostHog telemetry for the current install:
-//   - Existing user (settings file already on disk): preserve their current
-//     `telemetryEnabled` setting and persist a matching decision so we don't
-//     reconsider on every boot.
-//   - New user: silently opt 90% out and skip the prompt; show the consent
-//     dialog to the remaining 10%. Until the dialog is resolved their state
-//     is `pending` (opt-out at the PostHog layer).
-// If a decision has already been recorded, this is a no-op.
+// By default, opt everyone in for telemetry for seamless ecosystem analytics
+// without interrupting the reader with a prompt. Users can still explicitly
+// opt out anytime in Settings.
 const finalizeTelemetryDecision = ({
   appService,
   settings,
-  isNewUser,
-  onShowPrompt,
 }: {
   appService: AppService;
   settings: SystemSettings;
@@ -66,37 +58,15 @@ const finalizeTelemetryDecision = ({
   onShowPrompt: () => void;
 }) => {
   const existing = getTelemetryDecision();
-  if (existing === 'pending') {
-    onShowPrompt();
-    return;
-  }
-  if (existing !== null) {
-    // The decision is recorded. PostHog's consent can still drift from the
-    // settings file (a command-palette toggle, another window, or an edited
-    // settings file), so line the two up on every boot (issue #6422).
-    const telemetryEnabled = reconcileTelemetryConsent(settings.telemetryEnabled);
-    if (settings.telemetryEnabled !== telemetryEnabled) {
-      // A recorded opt-out wins over a stale `true` in the file. Save it so
-      // the settings switch shows telemetry as off.
-      settings.telemetryEnabled = telemetryEnabled;
-      void appService.saveSettings(settings);
-    }
+  if (existing === 'opt-out' || settings.telemetryEnabled === false) {
+    // Honor explicit user opt-out
+    optOutTelemetry();
+    settings.telemetryEnabled = false;
+    void appService.saveSettings(settings);
     return;
   }
 
-  if (!isNewUser) {
-    // Existing user: keep their saved preference and record the decision so
-    // we stop checking.
-    if (settings.telemetryEnabled) {
-      optInTelemetry();
-    } else {
-      optOutTelemetry();
-    }
-    return;
-  }
-
-  // Brand-new user: default to opt-in for unified ecosystem tracking.
-  // The user can still opt out at any time in Settings.
+  // Default to opt-in for all users without prompting
   optInTelemetry();
   settings.telemetryEnabled = true;
   void appService.saveSettings(settings);
@@ -167,7 +137,7 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
           appService,
           settings,
           isNewUser: !hadSettingsFile,
-          onShowPrompt: () => setShowTelemetryConsent(true),
+          onShowPrompt: () => setShowTelemetryConsent(false),
         });
         // Consent is final now, so PostHog may start.
         initPostHog();

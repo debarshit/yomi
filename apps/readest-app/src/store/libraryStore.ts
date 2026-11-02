@@ -4,6 +4,7 @@ import { EnvConfigType, isTauriAppPlatform } from '@/services/environment';
 import { BOOK_UNGROUPED_NAME } from '@/services/constants';
 import { md5Fingerprint } from '@/utils/md5';
 import { isMainAppWindow } from '@/utils/window';
+import { trackBookImported, trackBooksBatchImported, trackLibraryStats } from '@/utils/telemetry';
 
 interface LibraryState {
   library: Book[]; // might contain deleted books
@@ -100,6 +101,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   setCheckLastOpenBooks: (check) => set({ checkLastOpenBooks: check }),
   setCheckPendingLaunchLink: (check) => set({ checkPendingLaunchLink: check }),
   setLibrary: (books) => {
+    const isFirstLoad = !get().libraryLoaded;
     const coverThumbnails = new Map(get().coverThumbnails);
     const liveCoverHashes = new Map(
       books.filter((book) => !book.deletedAt).map((book) => [book.hash, book.coverHash ?? null]),
@@ -115,6 +117,35 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       coverThumbnails,
     });
     get().refreshGroups();
+
+    if (isFirstLoad && books.length > 0) {
+      try {
+        const formats: Record<string, number> = {};
+        let finished = 0;
+        let reading = 0;
+        let unread = 0;
+
+        for (const b of books) {
+          if (b.deletedAt) continue;
+          const fmt = (b.format || 'UNKNOWN').toUpperCase();
+          formats[fmt] = (formats[fmt] || 0) + 1;
+
+          if (b.readingStatus === 'finished') finished++;
+          else if (b.readingStatus === 'reading' || (b.progress && b.progress[0] > 1)) reading++;
+          else unread++;
+        }
+
+        trackLibraryStats({
+          totalBooks: books.filter((b) => !b.deletedAt).length,
+          formats,
+          finishedBooks: finished,
+          readingBooks: reading,
+          unreadBooks: unread,
+        });
+      } catch (_) {
+        // Telemetry must never crash state updates
+      }
+    }
   },
 
   setBookCoverThumbnail: (hash, coverHash, url) => {
@@ -198,6 +229,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       });
     }
 
+    const existingHashes = new Set(library.map((b) => b.hash));
+    const newBooks = books.filter((b) => !existingHashes.has(b.hash));
+
     const newLibrary = Array.from(new Map([...library, ...books].map((b) => [b.hash, b])).values());
     set({
       library: newLibrary,
@@ -205,6 +239,24 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       visibleLibrary: newLibrary.filter((b) => !b.deletedAt),
     });
     refreshGroups();
+
+    if (newBooks.length > 0) {
+      try {
+        const formats: Record<string, number> = {};
+        for (const b of newBooks) {
+          const fmt = (b.format || 'UNKNOWN').toUpperCase();
+          formats[fmt] = (formats[fmt] || 0) + 1;
+          trackBookImported({
+            id: b.hash,
+            title: typeof b.title === 'string' ? b.title : undefined,
+            format: b.format,
+          });
+        }
+        trackBooksBatchImported(newBooks.length, formats, 'library_import');
+      } catch (_) {
+        // Telemetry must never block book imports
+      }
+    }
 
     if (!options?.skipSave) {
       const appService = await envConfig.getAppService();

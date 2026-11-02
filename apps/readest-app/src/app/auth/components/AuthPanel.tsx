@@ -5,7 +5,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { getOSPlatform } from '@/utils/misc';
 import { trackYomiSignupClicked } from '@/utils/telemetry';
 import { isTauriAppPlatform } from '@/services/environment';
-import { openExternalUrl } from '@/utils/open';
+import { openSafariView } from '@/utils/open';
 import EmailPasswordAuth from './EmailPasswordAuth';
 
 const basePath = process.env['NEXT_PUBLIC_BASE_PATH'] || '';
@@ -67,7 +67,7 @@ export default function AuthPanel({
               onClick={(e) => {
                 if (isTauriAppPlatform()) {
                   e.preventDefault();
-                  openExternalUrl(getSignupUrl());
+                  void openSafariView(getSignupUrl());
                 }
                 trackYomiSignupClicked(getOSPlatform());
               }}

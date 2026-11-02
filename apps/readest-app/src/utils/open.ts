@@ -30,3 +30,26 @@ export const interceptWindowOpen = () => {
     }
   };
 };
+
+/**
+ * Opens an external web URL within an in-app Safari View Controller on iOS
+ * (complying with Apple App Store Guideline 4), or falls back to
+ * the default external browser on Android and other platforms.
+ */
+export const openSafariView = async (url: string) => {
+  if (isTauriAppPlatform()) {
+    try {
+      const { type: osType } = await import('@tauri-apps/plugin-os');
+      if (osType() === 'ios') {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('plugin:native-bridge|open_external_url', {
+          payload: { url },
+        });
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to open Safari View Controller, falling back to openExternalUrl', err);
+    }
+  }
+  openExternalUrl(url);
+};

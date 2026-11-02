@@ -3,6 +3,7 @@ import AuthenticationServices
 import CoreText
 import MediaPlayer
 import ObjectiveC
+import SafariServices
 import StoreKit
 import SwiftRs
 import Tauri
@@ -27,6 +28,10 @@ func getLocalizedDisplayName(familyName: String) -> String? {
     return localizedName as String
   }
   return nil
+}
+
+class OpenExternalUrlArgs: Decodable {
+  let url: String
 }
 
 class SafariAuthRequestArgs: Decodable {
@@ -1095,6 +1100,37 @@ class NativeBridgePlugin: Plugin {
 
     let started = authSession?.start() ?? false
     logger.log("Auth session start result: \(started)")
+  }
+
+  @objc public func open_external_url(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(OpenExternalUrlArgs.self)
+    guard let url = URL(string: args.url) else {
+      invoke.reject("Invalid URL")
+      return
+    }
+
+    DispatchQueue.main.async {
+      if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+        let safariVC = SFSafariViewController(url: url)
+        safariVC.modalPresentationStyle = .pageSheet
+
+        guard let rootVC = self.appWindow()?.rootViewController else {
+          invoke.reject("No root view controller found")
+          return
+        }
+        var presenter: UIViewController = rootVC
+        while let next = presenter.presentedViewController {
+          presenter = next
+        }
+        presenter.present(safariVC, animated: true) {
+          invoke.resolve(["success": true])
+        }
+      } else {
+        UIApplication.shared.open(url, options: [:]) { success in
+          invoke.resolve(["success": success])
+        }
+      }
+    }
   }
 
   @objc public func set_system_ui_visibility(_ invoke: Invoke) throws {

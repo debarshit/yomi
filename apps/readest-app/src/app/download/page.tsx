@@ -14,6 +14,7 @@ import {
   Zap,
   Sparkles,
 } from 'lucide-react';
+import { TrackedDownloadLink } from './TrackedDownloadLink';
 
 export const metadata: Metadata = {
   title: 'Download Yomi - Beautiful, Cross-Platform Ebook Reader | Biblophile',
@@ -105,7 +106,10 @@ export default function DownloadPage() {
                 macOS 12.0 Monterey or later
               </p>
               <div className='space-y-2.5 mb-6'>
-                <a
+                <TrackedDownloadLink
+                  platform='macos'
+                  format='dmg_silicon'
+                  channel='github'
                   href={`${GITHUB_RELEASES_URL}`}
                   className='w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium hover:opacity-90 transition-opacity'
                 >
@@ -114,8 +118,11 @@ export default function DownloadPage() {
                     Apple Silicon (M1/M2/M3/M4)
                   </span>
                   <span className='text-xs opacity-75'>.dmg</span>
-                </a>
-                <a
+                </TrackedDownloadLink>
+                <TrackedDownloadLink
+                  platform='macos'
+                  format='dmg_intel'
+                  channel='github'
                   href={`${GITHUB_RELEASES_URL}`}
                   className='w-full flex items-center justify-between px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 text-neutral-800 dark:text-neutral-200 text-sm font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors'
                 >
@@ -124,10 +131,12 @@ export default function DownloadPage() {
                     Intel Mac
                   </span>
                   <span className='text-xs text-neutral-500'>.dmg</span>
-                </a>
+                </TrackedDownloadLink>
               </div>
             </div>
-            <a
+            <TrackedDownloadLink
+              platform='macos'
+              channel='app_store'
               href='https://apps.apple.com/app/yomi/id6478832049'
               target='_blank'
               rel='noreferrer'
@@ -135,7 +144,7 @@ export default function DownloadPage() {
             >
               <span>Download from Mac App Store</span>
               <ExternalLink className='w-3 h-3' />
-            </a>
+            </TrackedDownloadLink>
           </div>
 
           {/* Windows */}
@@ -149,7 +158,10 @@ export default function DownloadPage() {
                 Windows 10 / 11 (64-bit)
               </p>
               <div className='space-y-2.5 mb-6'>
-                <a
+                <TrackedDownloadLink
+                  platform='windows'
+                  format='exe'
+                  channel='github'
                   href={`${GITHUB_RELEASES_URL}`}
                   className='w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium hover:opacity-90 transition-opacity'
                 >
@@ -158,8 +170,11 @@ export default function DownloadPage() {
                     Installer (.exe)
                   </span>
                   <span className='text-xs opacity-75'>x64</span>
-                </a>
-                <a
+                </TrackedDownloadLink>
+                <TrackedDownloadLink
+                  platform='windows'
+                  format='zip'
+                  channel='github'
                   href={`${GITHUB_RELEASES_URL}`}
                   className='w-full flex items-center justify-between px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 text-neutral-800 dark:text-neutral-200 text-sm font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors'
                 >
@@ -168,7 +183,7 @@ export default function DownloadPage() {
                     Portable (.zip)
                   </span>
                   <span className='text-xs text-neutral-500'>no install</span>
-                </a>
+                </TrackedDownloadLink>
               </div>
             </div>
             <span className='text-xs text-neutral-400 dark:text-neutral-500'>
@@ -187,7 +202,10 @@ export default function DownloadPage() {
                 Ubuntu, Debian, Fedora, Arch & more
               </p>
               <div className='space-y-2.5 mb-6'>
-                <a
+                <TrackedDownloadLink
+                  platform='linux'
+                  format='appimage'
+                  channel='github'
                   href={`${GITHUB_RELEASES_URL}`}
                   className='w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium hover:opacity-90 transition-opacity'
                 >
@@ -196,22 +214,28 @@ export default function DownloadPage() {
                     AppImage
                   </span>
                   <span className='text-xs opacity-75'>Universal</span>
-                </a>
+                </TrackedDownloadLink>
                 <div className='grid grid-cols-2 gap-2'>
-                  <a
+                  <TrackedDownloadLink
+                    platform='linux'
+                    format='deb'
+                    channel='github'
                     href={`${GITHUB_RELEASES_URL}`}
                     className='flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 text-neutral-800 dark:text-neutral-200 text-xs font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800'
                   >
                     <Download className='w-3.5 h-3.5' />
                     .deb (Debian)
-                  </a>
-                  <a
+                  </TrackedDownloadLink>
+                  <TrackedDownloadLink
+                    platform='linux'
+                    format='rpm'
+                    channel='github'
                     href={`${GITHUB_RELEASES_URL}`}
                     className='flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 text-neutral-800 dark:text-neutral-200 text-xs font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800'
                   >
                     <Download className='w-3.5 h-3.5' />
                     .rpm (Fedora)
-                  </a>
+                  </TrackedDownloadLink>
                 </div>
               </div>
             </div>
@@ -231,7 +255,10 @@ export default function DownloadPage() {
                 Phones, Tablets, and E-ink devices
               </p>
               <div className='space-y-2.5 mb-6'>
-                <a
+                <TrackedDownloadLink
+                  platform='android'
+                  format='apk'
+                  channel='github'
                   href={`${GITHUB_RELEASES_URL}`}
                   className='w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium hover:opacity-90 transition-opacity'
                 >
@@ -240,8 +267,10 @@ export default function DownloadPage() {
                     Direct APK Download
                   </span>
                   <span className='text-xs opacity-75'>Universal</span>
-                </a>
-                <a
+                </TrackedDownloadLink>
+                <TrackedDownloadLink
+                  platform='android'
+                  channel='play_store'
                   href='https://play.google.com/store/apps/details?id=com.biblophile.yomi'
                   target='_blank'
                   rel='noreferrer'
@@ -252,7 +281,7 @@ export default function DownloadPage() {
                     Google Play Store
                   </span>
                   <span className='text-xs text-neutral-500'>Coming soon</span>
-                </a>
+                </TrackedDownloadLink>
               </div>
             </div>
             <span className='text-xs text-neutral-400 dark:text-neutral-500'>
@@ -271,7 +300,9 @@ export default function DownloadPage() {
                 iOS 16.4 or later
               </p>
               <div className='space-y-2.5 mb-6'>
-                <a
+                <TrackedDownloadLink
+                  platform='ios'
+                  channel='app_store'
                   href='https://apps.apple.com/app/yomi/id6478832049'
                   target='_blank'
                   rel='noreferrer'
@@ -282,7 +313,7 @@ export default function DownloadPage() {
                     Apple App Store
                   </span>
                   <span className='text-xs opacity-75'>iPhone & iPad</span>
-                </a>
+                </TrackedDownloadLink>
               </div>
             </div>
             <span className='text-xs text-neutral-400 dark:text-neutral-500'>
@@ -327,7 +358,9 @@ export default function DownloadPage() {
           <p className='text-sm text-neutral-600 dark:text-neutral-400 mb-6'>
             All release packages, checksums, and changelogs are published transparently on GitHub.
           </p>
-          <a
+          <TrackedDownloadLink
+            platform='all'
+            channel='github'
             href={GITHUB_RELEASES_URL}
             target='_blank'
             rel='noreferrer'
@@ -335,7 +368,7 @@ export default function DownloadPage() {
           >
             <span>View all GitHub Releases</span>
             <ExternalLink className='w-4 h-4' />
-          </a>
+          </TrackedDownloadLink>
         </div>
       </main>
 

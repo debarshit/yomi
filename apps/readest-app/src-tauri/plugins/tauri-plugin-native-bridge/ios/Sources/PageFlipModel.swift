@@ -106,9 +106,15 @@ final class PageFlipModel {
     0, Double.pi - bendAmplitudeForChord(minPressedEdgeX) - pressedSurfaceClearance)
   private static let hingeRotation = maxPressedRollTilt * gestureRollTiltRate
   private static let hingeChordX = minPressedEdgeX / cos(hingeRotation)
-  private static let quadrature: [Double] = (0..<segments * 2).map { i in
-    (Double(i / 2) + 0.5 + (i % 2 == 0 ? -1 : 1) * 0.5 / sqrt(3.0)) / Double(segments)
-  }
+  private static let quadrature: [Double] = {
+    let invSqrt3: Double = 0.5 / sqrt(3.0)
+    let totalSegments: Double = Double(segments)
+    return (0..<(segments * 2)).map { (i: Int) -> Double in
+      let base: Double = Double(i / 2) + 0.5
+      let sign: Double = (i % 2 == 0) ? -1.0 : 1.0
+      return (base + sign * invSqrt3) / totalSegments
+    }
+  }()
 
   private enum Phase { case idle, drag, press, turn, unturn, revert, completed }
   private var phase = Phase.idle

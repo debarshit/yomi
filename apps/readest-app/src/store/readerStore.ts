@@ -509,7 +509,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           lastTrackedMilestone: Math.floor(startProgVal / 25) * 25,
           maxPageReached: startPageVal,
         });
-      } catch (e) {
+      } catch {
         // Telemetry failure should never affect reader initialization
       }
 
@@ -577,9 +577,16 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     try {
       const currentSettings = viewState.viewSettings;
       if (currentSettings) {
-        if (viewSettings.fontFamily && viewSettings.fontFamily !== currentSettings.fontFamily) {
+        const fontChanged =
+          (viewSettings.serifFont && viewSettings.serifFont !== currentSettings.serifFont) ||
+          (viewSettings.sansSerifFont &&
+            viewSettings.sansSerifFont !== currentSettings.sansSerifFont) ||
+          (viewSettings.monospaceFont &&
+            viewSettings.monospaceFont !== currentSettings.monospaceFont);
+        if (fontChanged) {
           trackReaderFeatureUsed('font_change', {
-            font: viewSettings.fontFamily,
+            font:
+              viewSettings.serifFont || viewSettings.sansSerifFont || viewSettings.monospaceFont,
             book_id: id,
           });
         }
@@ -590,7 +597,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           });
         }
       }
-    } catch (e) {
+    } catch {
       // Telemetry should never affect settings updates
     }
 

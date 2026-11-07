@@ -33,10 +33,12 @@ import { useDeviceControlStore } from '@/store/deviceStore';
 import { useFoliateEvents } from '../../hooks/useFoliateEvents';
 import { useRendererInputListeners } from '../../hooks/useRendererInputListeners';
 import { useBookOrbitNotesSync } from '../../hooks/useBookOrbitNotesSync';
+import { useGrimmoryNotesSync } from '../../hooks/useGrimmoryNotesSync';
 import { useNotesSync } from '../../hooks/useNotesSync';
 import { useReadwiseSync } from '../../hooks/useReadwiseSync';
 import { useHardcoverSync } from '../../hooks/useHardcoverSync';
 import { useNotionSync } from '../../hooks/useNotionSync';
+import { useObsidianSync } from '../../hooks/useObsidianSync';
 import { useTextSelector } from '../../hooks/useTextSelector';
 import { useSaveBooknoteNoteText } from '../../hooks/useSaveBooknoteNoteText';
 import { placeToolbar, Point, Position, Rect, TextSelection } from '@/utils/sel';
@@ -82,15 +84,14 @@ import {
   mergeRestyledAnnotation,
   removeBookNoteOverlays,
   removeEmptyAnnotationPlaceholder,
+  resolveAnnotationClick,
 } from '../../utils/annotatorUtil';
 import { buildAnnotationIndex, selectLocationAnnotations } from '../../utils/annotationIndex';
 import { findContentAtPoint } from '../../utils/crossDocSelection';
 import {
   expandAllRenderedSections,
   expandGlobalAnnotation,
-  isSyntheticGlobalValue,
   removeGlobalAnnotationOverlays,
-  sourceCfiFromSyntheticValue,
 } from '../../utils/globalAnnotations';
 import { annotationToolButtons } from './AnnotationTools';
 import AnnotationRangeEditor from './AnnotationRangeEditor';
@@ -98,6 +99,9 @@ import PageTurnHint from './PageTurnHint';
 import SelectionRangeEditor from './SelectionRangeEditor';
 import AnnotationPopup from './AnnotationPopup';
 import DictionaryPopup from './DictionaryPopup';
+import type { VocabularyCapture } from './DictionaryResultsView';
+import { vocabularyLang } from '@/services/vocabulary/entry';
+import { sentenceAt } from '@/services/vocabulary/sentence';
 import DictionarySheet from './DictionarySheet';
 import NoteEditorSheet from './NoteEditorSheet';
 import TranslatorPopup from './TranslatorPopup';
@@ -171,9 +175,11 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
 
   useNotesSync(bookKey);
   useBookOrbitNotesSync(bookKey);
+  useGrimmoryNotesSync(bookKey);
   useReadwiseSync(bookKey);
   useHardcoverSync(bookKey);
   useNotionSync(bookKey);
+  useObsidianSync(bookKey);
 
   useEffect(() => {
     void loadCustomDictionaries(envConfig).catch((error) => {
@@ -485,6 +491,26 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [showDictionaryPopup, selection],
   );
+  // The lookup as the vocabulary builder saves it (#789), filed under the
+  // same language Word Lens reads its marks from.
+  const dictionaryCapture = useMemo<VocabularyCapture | undefined>(
+    () =>
+      showDictionaryPopup && selection?.text
+        ? {
+            lang: vocabularyLang(bookData.book?.primaryLanguage),
+            occurrence: {
+              sentence: (selection.range && sentenceAt(selection.range)) || selection.text,
+              bookHash: bookData.book?.hash,
+              bookTitle: bookData.book?.title,
+              bookAuthor: bookData.book?.author,
+              cfi: selection.cfi,
+              at: Date.now(),
+            },
+          }
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showDictionaryPopup, selection],
+  );
 
   const getAnnotationText = useCallback(
     async (range: Range) => {
@@ -527,6 +553,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     handlePointerUp,
     handleDoubleClick,
     handleSelectionchange,
+    handleRendererRelocate,
     handleShowPopup,
     handleUpToPopup,
     handleContextmenu,
@@ -911,20 +938,9 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     const localIds = new Set(localBooknotes.map((n) => n.id));
     const filteredBuddyNotes = buddyReadAnnotations.filter((n) => !localIds.has(n.id));
     const booknotes = [...localBooknotes, ...filteredBuddyNotes];
-    const isNote = value.startsWith(NOTE_PREFIX);
-    const rawValue = isNote ? value.replace(NOTE_PREFIX, '') : value;
-    // A click on a fan-out copy of a global annotation reports a
-    // synthetic value (`${cfi}#g${i}`); map it back to the source
-    // booknote so the popup behaves identically to clicking the
-    // original anchor.
-    const cfi = isSyntheticGlobalValue(rawValue) ? sourceCfiFromSyntheticValue(rawValue) : rawValue;
-    const annotations = booknotes.filter(
-      (booknote) => booknote.type === 'annotation' && !booknote.deletedAt && booknote.cfi === cfi,
-    );
-    const annotation = annotations.find(
-      (annotation) => (!isNote && annotation.style) || (isNote && annotation.note),
-    );
-    if (!annotation) return;
+    const resolved = resolveAnnotationClick(value, booknotes);
+    if (!resolved) return;
+    const { annotation, cfi, isNote, isCopy } = resolved;
 
     const { style, color, text, note } = annotation;
     const selection = {
@@ -953,7 +969,9 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
         setSelectedStyle(style);
         setSelectedColor(color);
       }
-      if (style && range) {
+      // No range handles on a copy of a global annotation: dragging them would
+      // move the annotation itself to the copy's text.
+      if (style && range && !isCopy) {
         setEditingAnnotation(annotation);
       }
     }
@@ -994,6 +1012,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     onDrawAnnotation,
     onShowAnnotation,
     onRelocate,
+    onRendererRelocate: handleRendererRelocate,
   });
 
   // Mobile native-touch handler (Android MainActivity / iOS touch observer).
@@ -1723,6 +1742,13 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     setQuoteCard(null);
   };
 
+  // Whether a selection's own `cfi` names what it is on, rather than one
+  // recomputed from its range. A popup-window selection carries the CFI mapped
+  // into the pristine section. An annotated one keeps the CFI of the record it
+  // opened: on a copy of a global highlight the range is the copy's.
+  const keepsSelectionCfi = (sel: TextSelection) =>
+    sel.popup || (sel.annotated && (sel.segments ?? [sel]).length === 1);
+
   // Returns the brand-new highlight records (one per page of a cross-page
   // selection): only those are placeholders the note-cancel flow may remove;
   // restyling/toggling an existing one must never tear down the user's record.
@@ -1747,8 +1773,9 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     // Popup-window selections carry the CFI mapped into the pristine section;
     // recomputing from the popup range would yield an unresolvable path.
     const parts = selection.segments ?? [selection];
+    const keepCfi = keepsSelectionCfi(selection);
     const cfis = parts.map((part) =>
-      selection.popup ? selection.cfi : view?.getCFI(part.index, part.range),
+      keepCfi ? selection.cfi : view?.getCFI(part.index, part.range),
     );
     const findExisting = (cfi: string) =>
       annotations.findIndex(
@@ -1988,7 +2015,9 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     // A note goes onto an existing highlight as it is, without restyling it to
     // the last used style and color; only unhighlighted parts get a highlight.
     const created = handleHighlight(false, undefined, true);
-    const cfi = selection.popup ? selection.cfi : view?.getCFI(selection.index, selection.range);
+    const cfi = keepsSelectionCfi(selection)
+      ? selection.cfi
+      : view?.getCFI(selection.index, selection.range);
     const target =
       created[0] ??
       getConfig(bookKey)?.booknotes?.find(
@@ -2902,6 +2931,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
                 word={selection?.text as string}
                 lang={bookData.bookDoc?.metadata.language as string}
                 selection={dictionarySelection}
+                capture={dictionaryCapture}
                 onDismiss={handleDismissPopupShowToolbar}
                 onManage={onManage}
               />
@@ -2913,6 +2943,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
               word={selection?.text as string}
               lang={bookData.bookDoc?.metadata.language as string}
               selection={dictionarySelection}
+              capture={dictionaryCapture}
               position={dictPopupPosition}
               trianglePosition={trianglePosition}
               popupWidth={dictPopupWidth}

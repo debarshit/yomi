@@ -26,7 +26,7 @@ interface AuthContextType {
   user: User | null;
   login: (token: string, user: User) => void;
   logout: () => void;
-  refresh: () => void;
+  refresh: () => Promise<boolean>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -79,9 +79,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<boolean> => {
     const refreshToken = localStorage.getItem('refresh_token');
-    if (!refreshToken) return;
+    if (!refreshToken) return false;
 
     const apiUrl = process.env['NEXT_PUBLIC_BIBLO_API_URL'] || 'http://localhost:3001/api/v0';
     try {
@@ -97,10 +97,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (result.status === 'success' && result.data?.accessToken) {
           localStorage.setItem('token', result.data.accessToken);
           setToken(result.data.accessToken);
+          return true;
         }
       }
+      return false;
     } catch (e) {
       console.error('Refresh token call failed:', e);
+      return false;
     }
   }, []);
 

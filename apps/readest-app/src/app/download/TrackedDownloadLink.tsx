@@ -4,7 +4,7 @@ import React from 'react';
 import { captureEvent } from '@/utils/telemetry';
 
 interface TrackedDownloadLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
-  platform: 'macos' | 'windows' | 'linux' | 'android' | 'ios' | 'web';
+  platform: 'macos' | 'windows' | 'linux' | 'android' | 'ios' | 'web' | 'all';
   format?: string;
   channel?: 'github' | 'app_store' | 'play_store' | 'direct';
   children: React.ReactNode;

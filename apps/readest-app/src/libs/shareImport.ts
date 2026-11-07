@@ -7,6 +7,7 @@ import { getUserID } from '@/utils/access';
 import { SyncClient } from '@/libs/sync';
 import { transformBookToDB } from '@/utils/transform';
 import { ShareApiError, getShare, type ImportShareResponse, type ShareMetadata } from './share';
+import { recordFlow } from '@/services/sync/dataFlow/log';
 
 interface EnsureSharedBookLocalArgs {
   token: string;
@@ -36,6 +37,9 @@ interface EnsureSharedBookLocalArgs {
  *    bytes the server already has, and so the cover-pull doesn't redo what
  *    `importBook` just extracted from the book file.
  */
+const recordSharedFile = (bookTitle: string, error?: string) =>
+  recordFlow({ connector: 'readest-cloud', direction: 'pull', kind: 'books', bookTitle, error });
+
 export const ensureSharedBookLocal = async ({
   token,
   importResult,
@@ -87,8 +91,10 @@ export const ensureSharedBookLocal = async ({
     // absent. Verify before claiming success — otherwise the recipient
     // navigates into the reader and hits "Book file not found".
     if (!(await appService.isBookAvailable(existing))) {
+      recordSharedFile(existing.title, 'Could not download shared book');
       throw new Error('Could not download shared book');
     }
+    recordSharedFile(existing.title);
     if (!existing.downloadedAt) existing.downloadedAt = Date.now();
     existing.updatedAt = Date.now();
     await persistLibrary();
@@ -122,6 +128,7 @@ export const ensureSharedBookLocal = async ({
     ? await tauriFetch(downloadUrl)
     : await globalThis.fetch(downloadUrl);
   if (!response.ok) {
+    recordSharedFile(shareMeta.title, response.statusText || 'Could not download shared book');
     throw new ShareApiError(
       response.status,
       undefined,
@@ -134,8 +141,10 @@ export const ensureSharedBookLocal = async ({
 
   const imported = await appService.importBook(file, library);
   if (!imported) {
+    recordSharedFile(shareMeta.title, 'Could not import shared book');
     throw new Error('Could not import shared book');
   }
+  recordSharedFile(shareMeta.title);
 
   // The server already holds the book + cover bytes (R2 byte-copy in the
   // import endpoint), so we tag uploadedAt/coverDownloadedAt to skip work

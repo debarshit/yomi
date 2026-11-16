@@ -8,7 +8,10 @@ import type { AppService } from '@/types/system';
 // half: a standing listener that turns `file-picker-result` payloads into
 // book files for import.
 
-type PluginEventHandler = (payload: { uris: string[] }) => void | Promise<void>;
+type PluginEventHandler = (payload: {
+  uris: string[];
+  names?: (string | null)[];
+}) => void | Promise<void>;
 
 const listeners: { plugin: string; event: string; handler: PluginEventHandler }[] = [];
 const unregisterMock = vi.fn();
@@ -84,6 +87,38 @@ describe('useAndroidPickedBooks', () => {
     await waitFor(() => expect(onPickedBooks).toHaveBeenCalledTimes(1));
     expect(onPickedBooks).toHaveBeenCalledWith([
       { path: 'content://com.android.providers.media.documents/document/1', name: 'novel.epub' },
+    ]);
+  });
+
+  test('uses native names array and skips basename for opaque document ids', async () => {
+    // This is the core bug fix: Downloads URIs like
+    //   content://com.android.providers.downloads.documents/document/12345
+    // have an opaque numeric last segment — basename() returns "12345" (no
+    // extension), the whitelist rejects it, and nothing imports. The Kotlin
+    // side now queries DISPLAY_NAME and ships it in payload.names[]; the
+    // hook must prefer that over calling basename() at all.
+    const onPickedBooks = vi.fn();
+    // basename should NOT be called when names are supplied by native side.
+    basenameMock.mockImplementation(async () => {
+      throw new Error('basename should not be called when names are present');
+    });
+    renderHook(() => useAndroidPickedBooks(makeAppService(true), onPickedBooks));
+    await waitFor(() => expect(listeners).toHaveLength(1));
+
+    await listeners[0]!.handler({
+      uris: [
+        'content://com.android.providers.downloads.documents/document/12345',
+        'content://com.android.providers.downloads.documents/document/99999',
+      ],
+      names: ['my-novel.epub', null], // null → fallback to basename (throws → drops)
+    });
+
+    await waitFor(() => expect(onPickedBooks).toHaveBeenCalledTimes(1));
+    expect(onPickedBooks).toHaveBeenCalledWith([
+      {
+        path: 'content://com.android.providers.downloads.documents/document/12345',
+        name: 'my-novel.epub',
+      },
     ]);
   });
 

@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import android.view.View
 import android.view.KeyEvent
 import android.view.RoundedCorner
@@ -1449,6 +1450,30 @@ class NativeBridgePlugin(private val activity: Activity): Plugin(activity) {
         }
     }
 
+    /**
+     * Query the ContentResolver for the DISPLAY_NAME of a content:// URI.
+     * Returns null on any failure (the JS side falls back to parsing the URI
+     * string, which is better than crashing the whole batch).
+     */
+    private fun queryDisplayName(uri: Uri): String? {
+        if (uri.scheme != "content") return null
+        return try {
+            activity.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null, null, null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (col >= 0) cursor.getString(col) else null
+                } else null
+            }
+        } catch (e: Exception) {
+            Log.w("NativeBridgePlugin", "queryDisplayName failed for $uri: ${e.message}")
+            null
+        }
+    }
+
     private fun emitFilePickerResult(data: Intent) {
         val uris = mutableListOf<Uri>()
         data.clipData?.let { clip ->
@@ -1464,9 +1489,20 @@ class NativeBridgePlugin(private val activity: Activity): Plugin(activity) {
         // into the library can happen after a process restart.
         uris.forEach { tryTakePersistableReadPermission(it) }
         val payload = JSObject().apply {
-            val arr = JSArray()
-            uris.forEach { arr.put(it.toString()) }
-            put("uris", arr)
+            val uriArr = JSArray()
+            val nameArr = JSArray()
+            uris.forEach { uri ->
+                uriArr.put(uri.toString())
+                // Query the real DISPLAY_NAME so the JS extension whitelist can
+                // classify the file even when the URI is an opaque document id
+                // with no filename/extension in the path (e.g. Downloads
+                // content://com.android.providers.downloads.documents/document/12345).
+                // A null here is serialised as JSON null; the JS side falls
+                // back to its own URI-string parse in that case.
+                nameArr.put(queryDisplayName(uri))
+            }
+            put("uris", uriArr)
+            put("names", nameArr)
         }
         emitOrQueue("file-picker-result", payload)
     }

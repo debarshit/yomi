@@ -12,6 +12,7 @@ import { eventDispatcher } from '@/utils/event';
 
 interface FilePickerResultPayload {
   uris: string[];
+  names?: (string | null)[];
 }
 
 /**
@@ -57,7 +58,11 @@ export function useAndroidPickedBooks(
         // useFileSelector), so resolve real display names first and re-apply
         // the book extension whitelist here, like the dialog-plugin path did.
         const files: SelectedFile[] = await Promise.all(
-          uris.map(async (path) => ({ path, name: await resolveTauriFileName(path, appService) })),
+          uris.map(async (path, i) => {
+            const nativeName = payload.names?.[i];
+            const name = nativeName ?? (await resolveTauriFileName(path, appService));
+            return { path, name };
+          }),
         );
         const extensions = FILE_SELECTION_PRESETS.books.extensions;
         const books = files.filter(({ name }) => hasAllowedExtension(name, extensions));

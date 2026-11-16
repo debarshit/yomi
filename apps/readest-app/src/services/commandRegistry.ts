@@ -8,6 +8,7 @@ import { PiRobot, PiSpeakerHigh, PiSun, PiMoon } from 'react-icons/pi';
 import { TbSunMoon } from 'react-icons/tb';
 import { MdRefresh } from 'react-icons/md';
 import { IconType } from 'react-icons';
+import { BRAND_NAME } from '@/services/branding';
 import { stubTranslation as _ } from '@/utils/misc';
 
 export type CommandCategory = 'settings' | 'actions' | 'navigation';
@@ -784,12 +785,12 @@ const actionItems = [
   },
   {
     id: 'action.about',
-    labelKey: _('About Readest'),
-    keywords: ['about', 'readest', 'version', 'info'],
+    labelKey: _('About {{brand}}', { brand: BRAND_NAME }),
+    keywords: ['about', BRAND_NAME.toLowerCase(), 'version', 'info'],
   },
   {
     id: 'action.telemetry',
-    labelKey: _('Help improve Readest'),
+    labelKey: _('Help improve {{brand}}', { brand: BRAND_NAME }),
     keywords: ['telemetry', 'analytics', 'improve', 'statistics'],
   },
 ];

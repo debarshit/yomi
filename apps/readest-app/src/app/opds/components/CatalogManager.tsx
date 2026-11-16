@@ -1081,7 +1081,8 @@ export function CatalogManager({ inSubPage = false }: CatalogManagerProps = {}) 
                     'New publications from this catalog will no longer be downloaded automatically.',
                   )
                 : _(
-                    'Readest will automatically download every new publication from this catalog when the app syncs. This may download a large number of books.',
+                    '{{brand}} will automatically download every new publication from this catalog when the app syncs. This may download a large number of books.',
+                    { brand: BRAND_NAME },
                   )
             }
             confirmLabel={confirmAutoDownloadCatalog.autoDownload ? _('Turn Off') : _('Enable')}

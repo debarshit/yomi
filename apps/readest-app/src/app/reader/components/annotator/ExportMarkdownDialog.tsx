@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { marked } from 'marked';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import { BRAND_NAME } from '@/services/branding';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -525,13 +526,15 @@ const ExportMarkdownDialog: React.FC<ExportMarkdownDialogProps> = ({
           >
             <option value='markdown'>{_('Markdown')}</option>
             <option value='text'>{_('Plain Text')}</option>
-            <option value='json'>{_('JSON (Readest)')}</option>
+            <option value='json'>{_('JSON ({{brand}})', { brand: BRAND_NAME })}</option>
           </select>
         </div>
 
         {isJson && (
           <p className='text-base-content/70 text-xs'>
-            {_('A machine-readable file that Readest can import back into any book.')}
+            {_('A machine-readable file that {{brand}} can import back into any book.', {
+              brand: BRAND_NAME,
+            })}
           </p>
         )}
 

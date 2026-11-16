@@ -823,7 +823,7 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
         <div>
           <BoxedList title={_('File Explorer')}>
             <SettingsSwitchRow
-              label={_('Use Readest for File Explorer thumbnails')}
+              label={_('Use {{brand}} for File Explorer thumbnails', { brand: BRAND_NAME })}
               description={_('Existing thumbnail providers are preserved')}
               checked={explorerThumbnails}
               disabled={explorerThumbnailsBusy}

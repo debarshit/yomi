@@ -26,6 +26,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useEnv } from '@/context/EnvContext';
 import { useAuth } from '@/context/AuthContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import { BRAND_NAME } from '@/services/branding';
 import { useFileSelector } from '@/hooks/useFileSelector';
 import { useCustomDictionaryStore } from '@/store/customDictionaryStore';
 import {
@@ -482,7 +483,7 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
           kind: 'builtin',
           disabled: !contextTranslator,
           reason: !hasPremium
-            ? _('Requires Readest Premium.')
+            ? _('Requires {{brand}} Premium.', { brand: BRAND_NAME })
             : !contextTranslator
               ? _('Add an OpenAI-compatible translator in Custom Translators to use it.')
               : undefined,

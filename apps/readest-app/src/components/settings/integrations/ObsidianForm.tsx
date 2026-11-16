@@ -1,6 +1,7 @@
 import React from 'react';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import { BRAND_NAME } from '@/services/branding';
 import { useSettingsStore } from '@/store/settingsStore';
 import type { ObsidianSettings } from '@/types/settings';
 import { requestStoragePermission } from '@/utils/permission';
@@ -62,7 +63,9 @@ const ObsidianForm: React.FC<ObsidianFormProps> = ({ onBack }) => {
           />
         </BoxedList>
         <Tips>
-          <li>{_('Choose a folder inside your vault, such as Readest.')}</li>
+          <li>
+            {_('Choose a folder inside your vault, such as {{brand}}.', { brand: BRAND_NAME })}
+          </li>
           <li>{_('A book is synced when you open it and whenever its notes change.')}</li>
           <li>
             {_(

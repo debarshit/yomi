@@ -16,6 +16,7 @@ import Dialog from '@/components/Dialog';
 import { useEnv } from '@/context/EnvContext';
 import { useFileSelector, type SelectedFile } from '@/hooks/useFileSelector';
 import { useTranslation } from '@/hooks/useTranslation';
+import { BRAND_NAME } from '@/services/branding';
 import type { BookDoc } from '@/libs/document';
 import {
   absPreviewClip,
@@ -670,7 +671,8 @@ const AudiobookPairingDialog = ({ bookKey, bookDoc, onClose }: AudiobookPairingD
       <SurfaceHeader
         title={_('Align One Chapter')}
         description={_(
-          'Choose one known match. Readest will map the remaining chapters sequentially from it.',
+          'Choose one known match. {{brand}} will map the remaining chapters sequentially from it.',
+          { brand: BRAND_NAME },
         )}
       />
       <div className='eink-bordered border-base-200 bg-base-100 divide-base-200 mb-5 rounded-lg border divide-y'>

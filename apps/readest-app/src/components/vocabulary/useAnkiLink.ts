@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useEnv } from '@/context/EnvContext';
 import { useQuotaStats } from '@/hooks/useQuotaStats';
 import { useTranslation } from '@/hooks/useTranslation';
+import { BRAND_NAME } from '@/services/branding';
 import { useVocabularyStore } from '@/store/vocabularyStore';
 import {
   type AnkiImportPlan,
@@ -124,7 +125,10 @@ export const useAnkiLink = () => {
       return false;
     }
     if (now.granted || (await ankiRequestPermission())) return true;
-    toast('warning', _('Allow Readest to access AnkiDroid in system settings.'));
+    toast(
+      'warning',
+      _('Allow {{brand}} to access AnkiDroid in system settings.', { brand: BRAND_NAME }),
+    );
     return false;
   };
 
@@ -132,7 +136,10 @@ export const useAnkiLink = () => {
     if (err instanceof AnkiError && err.code === 'not_ready') {
       toast('warning', _('Open AnkiDroid once, then try again.'));
     } else if (err instanceof AnkiError) {
-      toast('warning', _('Allow Readest to access AnkiDroid in system settings.'));
+      toast(
+        'warning',
+        _('Allow {{brand}} to access AnkiDroid in system settings.', { brand: BRAND_NAME }),
+      );
     } else {
       console.warn('[anki] AnkiDroid call failed', err);
       toast('error', _('Could not reach AnkiDroid.'));

@@ -16,6 +16,7 @@ import {
 } from '@/helpers/shortcuts';
 import { useKeyDownActions } from '@/hooks/useKeyDownActions';
 import { useTranslation } from '@/hooks/useTranslation';
+import { BRAND_NAME } from '@/services/branding';
 import { isMacPlatform } from '@/services/environment';
 import {
   formatKeyForDisplay,
@@ -229,7 +230,9 @@ const KeyboardShortcutsSettings: React.FC<KeyboardShortcutsSettingsProps> = ({ o
       <SubPageHeader
         parentLabel={_('Behavior')}
         currentLabel={_('Keyboard Shortcuts')}
-        description={_('Choose the keyboard keys or mouse buttons that control Readest.')}
+        description={_('Choose the keyboard keys or mouse buttons that control {{brand}}.', {
+          brand: BRAND_NAME,
+        })}
         onBack={onBack}
         rightSlot={
           <button

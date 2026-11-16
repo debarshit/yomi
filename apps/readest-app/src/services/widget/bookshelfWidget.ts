@@ -24,8 +24,9 @@ import { resolveBookshelfGroupBy } from '@/services/bookshelves/grouping';
 import { presentBookshelf } from '@/services/bookshelves/presentation';
 import { getGlobalBookshelfSort, resolveBookshelfSort } from '@/services/bookshelves/sorting';
 import { readBookshelves } from '@/services/bookshelves/state';
+import { BRAND_NAME } from '@/services/branding';
 
-type Translate = (key: string) => string;
+type Translate = (key: string, options?: Record<string, string>) => string;
 
 /** What one widget publishes: everything but its id. */
 export type BookshelfWidgetSnapshot = Omit<UpdateBookshelfWidgetRequest, 'appWidgetId'>;
@@ -182,7 +183,7 @@ export const buildBookshelfWidgetCatalog = (
     cancel: _('Cancel'),
     save: _('Save'),
     edit: _('Edit'),
-    openApp: _('Open Readest to show this bookshelf'),
+    openApp: _('Open {{brand}} to show this bookshelf', { brand: BRAND_NAME }),
   },
 });
 

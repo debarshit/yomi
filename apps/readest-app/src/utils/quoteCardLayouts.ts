@@ -1,6 +1,7 @@
 // The quote card layouts (#5830). Each one is a pure function from the card
 // input to absolutely positioned elements, laid out left-to-right and mirrored
 // for RTL quotes at the end. Adding a layout means adding one function here.
+import { BRAND_NAME } from '@/services/branding';
 import {
   QUOTE_CARD_SIZES,
   ellipsize,
@@ -19,7 +20,7 @@ import {
 type LayoutFn = (input: QuoteCardInput, measure: MeasureText) => QuoteCardLayout;
 
 // Brand mark, never translated.
-const LOGO_TEXT = 'Readest';
+const LOGO_TEXT = BRAND_NAME;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 

@@ -27,6 +27,7 @@ import { isSystemDictionaryEnabled } from '@/services/dictionaries/registry';
 import { invokeSystemDictionary } from '@/services/dictionaries/systemDictionary';
 import { buildSelectionContext } from '@/services/dictionaries/contextDictionary';
 import type { DictionarySelectionContext } from '@/services/dictionaries/types';
+import { BRAND_NAME } from '@/services/branding';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { useDeviceControlStore } from '@/store/deviceStore';
@@ -2539,7 +2540,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
       accept: '.json,application/json',
       extensions: ['json'],
       multiple: false,
-      dialogTitle: _('Select Readest Annotations File'),
+      dialogTitle: _('Select {{brand}} Annotations File', { brand: BRAND_NAME }),
     });
     if (result.error || result.files.length === 0) return;
 
@@ -2557,7 +2558,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     if (!payload) {
       eventDispatcher.dispatch('toast', {
         type: 'warning',
-        message: _('This is not a Readest annotations file.'),
+        message: _('This is not a {{brand}} annotations file.', { brand: BRAND_NAME }),
         timeout: 3000,
       });
       return;

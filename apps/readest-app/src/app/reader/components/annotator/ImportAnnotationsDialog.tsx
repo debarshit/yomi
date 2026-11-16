@@ -1,6 +1,7 @@
 import React from 'react';
 import { MdDataObject, MdMenuBook, MdNightlightRound } from 'react-icons/md';
 import { useTranslation } from '@/hooks/useTranslation';
+import { BRAND_NAME } from '@/services/branding';
 import { BoxedList, NavigationRow } from '@/components/settings/primitives';
 import Dialog from '@/components/Dialog';
 
@@ -36,12 +37,15 @@ const ImportAnnotationsDialog: React.FC<ImportAnnotationsDialogProps> = ({
     >
       <BoxedList
         title={_('Import From')}
-        description={_('Import highlights and notes exported from Readest or another reading app.')}
+        description={_(
+          'Import highlights and notes exported from {{brand}} or another reading app.',
+          { brand: BRAND_NAME },
+        )}
       >
         <NavigationRow
           icon={MdDataObject}
-          title={_('Readest')}
-          status={_('Readest annotations file (.json)')}
+          title={BRAND_NAME}
+          status={_('{{brand}} annotations file (.json)', { brand: BRAND_NAME })}
           onClick={onImportReadest}
         />
         <NavigationRow

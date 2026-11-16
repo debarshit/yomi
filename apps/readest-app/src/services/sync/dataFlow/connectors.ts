@@ -29,6 +29,7 @@ import {
 } from '@/services/sync/cloudSyncProvider';
 import { KOSyncClient } from '@/services/sync/KOSyncClient';
 import { isSyncCategoryEnabled } from '@/services/sync/syncCategories';
+import { BRAND_NAME } from '@/services/branding';
 import { SyncClient } from '@/libs/sync';
 import { useLocalSendStore } from '@/store/localsendStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -196,7 +197,7 @@ const cloudConnectors = ({ settings, signedIn, plan }: ConnectorContext): FlowCo
     ];
     connectors.push({
       id: 'readest-cloud',
-      title: _('Readest Cloud'),
+      title: _('{{brand}} Cloud', { brand: BRAND_NAME }),
       sources: kinds,
       sinks: kinds,
       // Asks for changes from now on: there are none, so nothing is transferred.
@@ -259,7 +260,7 @@ const contentConnectors = (ctx: ConnectorContext): FlowConnector[] => {
   if (ctx.signedIn && isInboxDrainEnabled()) {
     connectors.push({
       id: 'send',
-      title: _('Send to Readest'),
+      title: _('Send to {{brand}}', { brand: BRAND_NAME }),
       sources: ['books'],
       sinks: [],
       // Lists the inbox rather than calling /send/inbox/claim: a claim leases

@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import { BRAND_NAME } from '@/services/branding';
 import { eventDispatcher } from '@/utils/event';
 import { makeSafeFilename } from '@/utils/misc';
 import { canShareText } from '@/utils/share';
@@ -78,7 +79,7 @@ const QuoteCardDialog: React.FC<QuoteCardDialogProps> = ({
   );
 
   // The brand stays untranslated inside the localized signature.
-  const signature = _('via {{app}}', { app: 'Readest' });
+  const signature = _('via {{app}}', { app: BRAND_NAME });
   const card = useMemo(() => ({ ...content, brand: signature }), [content, signature]);
 
   useEffect(() => {
@@ -95,7 +96,7 @@ const QuoteCardDialog: React.FC<QuoteCardDialogProps> = ({
     };
   }, [isOpen, card, style]);
 
-  const filename = `${makeSafeFilename(content.title || 'Readest')}-quote.png`;
+  const filename = `${makeSafeFilename(content.title || BRAND_NAME)}-quote.png`;
   const mimeType = 'image/png';
   const getBytes = async () => (await quoteCardToPng(canvasRef.current!)).arrayBuffer();
   const toast = (type: 'info' | 'error', message: string) =>
@@ -271,7 +272,7 @@ const QuoteCardDialog: React.FC<QuoteCardDialogProps> = ({
             {content.qrUrl && (
               <SettingsSwitchRow
                 label={_('QR Code')}
-                description={_('Links to this passage in Readest')}
+                description={_('Links to this passage in {{brand}}', { brand: BRAND_NAME })}
                 checked={showQr}
                 onChange={() => setShowQr((value) => !value)}
               />

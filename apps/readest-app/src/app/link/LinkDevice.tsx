@@ -9,6 +9,7 @@ import { useAppUrlIngress } from '@/hooks/useAppUrlIngress';
 import { useOpenDeviceLink } from '@/hooks/useOpenDeviceLink';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
+import { BRAND_NAME } from '@/services/branding';
 import { getAPIBaseUrl, isTauriAppPlatform } from '@/services/environment';
 import { useThemeStore } from '@/store/themeStore';
 import { fetchWithAuth } from '@/utils/fetch';
@@ -81,7 +82,8 @@ export default function LinkDevice() {
           <h1 className='text-xl font-semibold tracking-tight'>{_('Link a Reader')}</h1>
           <p className='text-base-content/70 mt-1 text-sm'>
             {_(
-              'The reader gets your Readest library, reading statistics and reading progress. Only enter a code shown on your own reader.',
+              'The reader gets your {{brand}} library, reading statistics and reading progress. Only enter a code shown on your own reader.',
+              { brand: BRAND_NAME },
             )}
           </p>
         </header>

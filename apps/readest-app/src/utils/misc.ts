@@ -102,6 +102,9 @@ export const isValidURL = (url: string, allowedSchemes: string[] = ['http', 'htt
   }
 };
 
-export const stubTranslation = (stubKey: string) => {
+export const stubTranslation = (stubKey: string, options?: Record<string, unknown>) => {
+  if (options) {
+    return stubKey.replace(/{{(\w+)}}/g, (_, k) => String(options[k] ?? ''));
+  }
   return stubKey;
 };

@@ -1936,7 +1936,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
         text: selection.text,
         note: '',
         reaction: reaction ?? undefined,
-        page: progress.page,
+        page: getBookProgress(bookKey)?.page,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };

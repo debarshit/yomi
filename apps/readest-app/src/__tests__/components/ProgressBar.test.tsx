@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -455,6 +456,15 @@ describe('ProgressBar — footer overlay pointer contract', () => {
     }
   });
 
+  it('drops the pill backdrops in scrolled mode with Solid Footer on (#6793)', () => {
+    // The band is reserved, so the info sits on it instead of over the text.
+    readerSettings({ scrolled: true, showRemainingPages: true, solidScrolledFooter: true });
+
+    const { container } = renderProgressBar();
+
+    expect(container.querySelector('.progress-pill')).toBeNull();
+  });
+
   it('does not add pill backdrops in paginated mode (band holds the info)', () => {
     readerSettings({ scrolled: false, showRemainingPages: true });
 
@@ -549,6 +559,15 @@ describe('ProgressBar — tap to toggle visibility (#5293)', () => {
 
   it('makes the whole strip tappable in scrolled mode when the sticky bar reserves the band', () => {
     readerSettings({ scrolled: true, showStickyProgressBar: true });
+
+    const { container } = renderProgressBar();
+
+    const strip = container.querySelector('.progress-strip') as HTMLElement;
+    expect(strip.classList.contains('pointer-events-auto')).toBe(true);
+  });
+
+  it('makes the whole strip tappable in scrolled mode with Solid Footer on (#6793)', () => {
+    readerSettings({ scrolled: true, showRemainingPages: true, solidScrolledFooter: true });
 
     const { container } = renderProgressBar();
 
@@ -944,5 +963,35 @@ describe('ProgressBar — battery percentage follows a custom footer color (#679
     settings({ isEink: true, headerFooterTextColor: '#806000' });
     renderProgressBar();
     expect(statusInfoProps?.['inheritTextColor']).toBe(false);
+  });
+});
+
+describe('ProgressBar vertical safe-area top (#7389)', () => {
+  it('anchors the vertical progress bar below gridInsets.top plus 1.5x margin', () => {
+    currentViewSettings = { ...baseSettings, vertical: true } as ViewSettings;
+    const { container } = render(
+      <ProgressBar
+        bookKey='book-1'
+        horizontalGap={0}
+        contentInsets={{ top: 75, right: 0, bottom: 0, left: 0 }}
+        gridInsets={{ top: 59, right: 0, bottom: 0, left: 0 }}
+      />,
+    );
+    const bar = container.querySelector('.progressinfo') as HTMLElement;
+    expect(bar.style.top).toBe('83px');
+  });
+
+  it('keeps the 1.5x vertical margin when gridInsets.top is zero', () => {
+    currentViewSettings = { ...baseSettings, vertical: true } as ViewSettings;
+    const { container } = render(
+      <ProgressBar
+        bookKey='book-1'
+        horizontalGap={0}
+        contentInsets={{ top: 16, right: 0, bottom: 0, left: 0 }}
+        gridInsets={{ top: 0, right: 0, bottom: 0, left: 0 }}
+      />,
+    );
+    const bar = container.querySelector('.progressinfo') as HTMLElement;
+    expect(bar.style.top).toBe('24px');
   });
 });

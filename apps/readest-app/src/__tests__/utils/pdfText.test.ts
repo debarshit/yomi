@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, afterEach } from 'vitest';
 import { classifyPdfLineBreaks, getPdfTextFromRange, type PdfLine } from '@/utils/pdfText';
 import { getTextFromRange } from '@/utils/sel';
@@ -228,6 +229,24 @@ describe('getPdfTextFromRange', () => {
     expect(getPdfTextFromRange(range, layer)).toBe(
       'creating printed output, the most accurate way to calibrate your monitor is to print a test image.\n' +
         'If you are creating output for video, it pays to view your footage',
+    );
+  });
+
+  it('reads line breaks that foliate-js moved to the end of their line', () => {
+    const layer = buildTwoParagraphs();
+    // foliate-js wraps each <br> in a span placed at the end of its line.
+    for (const el of [...layer.querySelectorAll('br')]) {
+      const end = document.createElement('span');
+      end.className = 'endOfLine';
+      el.replaceWith(end);
+      end.append(el);
+    }
+    const range = document.createRange();
+    range.selectNodeContents(layer);
+
+    expect(getTextFromRange(range)).toBe(
+      'If you are ever creating printed output, the most accurate way to calibrate your monitor is to print a test image.\n' +
+        'If you are creating output for video, it pays to view your footage.',
     );
   });
 

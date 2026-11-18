@@ -6,6 +6,7 @@ import { PiBookmarkSimple, PiHighlighter, PiNotePencil, PiScribbleLoop } from 'r
 import { useEnv } from '@/context/EnvContext';
 import { BookNote, HighlightColor } from '@/types/book';
 import { useSettingsStore } from '@/store/settingsStore';
+import { useBookProgress } from '@/store/readerProgressStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useNotebookStore } from '@/store/notebookStore';
 import { useBookDataStore } from '@/store/bookDataStore';
@@ -55,8 +56,10 @@ const BooknoteItem: React.FC<BooknoteItemProps> = ({
   const _ = useTranslation();
   const { envConfig, appService } = useEnv();
   const { settings } = useSettingsStore();
-  const { getConfig, saveConfig, updateBooknotes } = useBookDataStore();
-  const { getProgress, getView, getViewsById, getViewSettings } = useReaderStore();
+  const getConfig = useBookDataStore((s) => s.getConfig);
+  const saveConfig = useBookDataStore((s) => s.saveConfig);
+  const updateBooknotes = useBookDataStore((s) => s.updateBooknotes);
+  const { getView, getViewsById, getViewSettings } = useReaderStore();
   const { setNotebookEditAnnotation, setNotebookVisible } = useNotebookStore();
   const auth = useContext(AuthContext);
   const user = auth?.user;
@@ -97,7 +100,7 @@ const BooknoteItem: React.FC<BooknoteItemProps> = ({
   const separatorWidth = useResponsiveSize(3);
   const size18 = useResponsiveSize(18);
 
-  const progress = getProgress(bookKey);
+  const progress = useBookProgress(bookKey);
   // Active highlight: keep visual "current" state but don't scroll from the
   // item itself anymore — the parent (virtualized) BooknoteView handles
   // scrolling via virtuosoRef.scrollToIndex, avoiding N getBoundingClientRect

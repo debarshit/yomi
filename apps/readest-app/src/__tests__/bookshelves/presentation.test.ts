@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import type { Book } from '@/types/book';
 import { createBookshelf, defaultBookshelves } from '@/services/bookshelves/definitions';
@@ -13,6 +14,38 @@ const books: Book[] = Array.from({ length: 30 }, (_, index) => ({
   updatedAt: index,
 }));
 describe('bookshelf presentation parity', () => {
+  it.each([
+    false,
+    true,
+  ])('falls back to recent reading for a manual order without a metadata sort (recursive %s)', (recursive) => {
+    const definition = {
+      ...createBookshelf('', 'default'),
+      sort: {
+        by: 'custom' as const,
+        ascending: true,
+        thenBy: 'none' as const,
+        thenAscending: true,
+      },
+      ...(recursive && {
+        customSortFallback: {
+          by: 'custom' as const,
+          ascending: true,
+          thenBy: 'none' as const,
+          thenAscending: true,
+        },
+      }),
+      manualOrder: { 'none:': ['b:0'] },
+    };
+    const input = books.slice(0, 3).map((book) => ({ ...book, groupName: undefined }));
+    expect(
+      presentBookshelf(
+        { definition, books: input, matching: 3, excluded: 0 },
+        { libraryGroupBy: 'none' },
+        'en',
+      ).map((item) => ('hash' in item ? item.hash : item.id)),
+    ).toEqual(['0', '2', '1']);
+  });
+
   it.each([
     true,
     false,

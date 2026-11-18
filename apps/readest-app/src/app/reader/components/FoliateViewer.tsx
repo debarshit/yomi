@@ -47,6 +47,8 @@ import { useKOSync } from '../hooks/useKOSync';
 import { useFileSync } from '../hooks/useFileSync';
 import {
   applyEinkModeAttribute,
+  applyOrientationMedia,
+  applyViewportUnits,
   applyFixedlayoutStyles,
   applyImageStyle,
   applyNamespacedAttributes,
@@ -63,6 +65,7 @@ import {
   transformStylesheet,
 } from '@/utils/style';
 import { applyScrollableStyle, applyTableTouchScroll } from '@/utils/scrollable';
+import { classifyAndTagStandaloneDiagrams } from '@/utils/imageClassifier';
 import { mountAdditionalFonts, mountCustomFont } from '@/styles/fonts';
 import { layoutWarichu, relayoutWarichu } from '@/utils/warichu';
 import { refreshSectionGlosses, whenSelectionClears } from '@/app/reader/utils/wordlensSection';
@@ -141,6 +144,44 @@ declare global {
     eval(script: string): void;
   }
 }
+
+// The reading area is the foliate-view box: the sidebars overlay it, and the
+// section iframes inside it are sized to their content.
+const isLandscapeBox = (el: Element) => {
+  const { width, height } = el.getBoundingClientRect();
+  return width > height;
+};
+
+// The hooks that follow the reading position (progress sync and save, KOSync, file sync, the
+// translation of the shown page) subscribe to the progress, which every page turn writes. Here they
+// re-render on a turn without the viewer and everything it holds.
+const PositionFollowers: React.FC<{
+  bookKey: string;
+  viewRef: React.RefObject<FoliateView | null>;
+}> = ({ bookKey, viewRef }) => {
+  useProgressSync(bookKey);
+  useABSProgressSync(bookKey);
+  useProgressAutoSave(bookKey);
+  const syncs = [
+    useKOSync(bookKey),
+    useKOSync(bookKey, bookOrbitProgressProvider),
+    useKOSync(bookKey, grimmoryProgressProvider),
+  ];
+  useFileSync(bookKey);
+  useTextTranslation(bookKey, viewRef.current);
+
+  return syncs.map((sync, i) =>
+    sync.syncState === 'conflict' && sync.conflictDetails ? (
+      <KOSyncConflictResolver
+        key={i}
+        details={sync.conflictDetails}
+        onResolveWithLocal={sync.resolveWithLocal}
+        onResolveWithRemote={sync.resolveWithRemote}
+        onClose={sync.resolveWithLocal}
+      />
+    ) : null,
+  );
+};
 
 const FoliateViewer: React.FC<{
   bookKey: string;
@@ -233,15 +274,7 @@ const FoliateViewer: React.FC<{
   }, [toastMessage]);
 
   useUICSS(bookKey);
-  useProgressSync(bookKey);
-  useABSProgressSync(bookKey);
-  useProgressAutoSave(bookKey);
   useBookCoverAutoSave(bookKey);
-  const { syncState, conflictDetails, resolveWithLocal, resolveWithRemote } = useKOSync(bookKey);
-  const bookOrbitSync = useKOSync(bookKey, bookOrbitProgressProvider);
-  const grimmorySync = useKOSync(bookKey, grimmoryProgressProvider);
-  useFileSync(bookKey);
-  useTextTranslation(bookKey, viewRef.current);
 
   // Coalesce setProgress writes within a single animation frame.
   //
@@ -450,7 +483,20 @@ const FoliateViewer: React.FC<{
       if (typeof ResizeObserver === 'undefined') return;
       const el = viewRef.current;
       if (el) {
-        observer = new ResizeObserver(() => invalidateChapterScreens());
+        // The same resize can turn the reading area, which the book's
+        // `(orientation: ...)` rules follow (see applyOrientationMedia), and
+        // changes what the book's vw/vh lengths resolve to.
+        let landscape = isLandscapeBox(el);
+        observer = new ResizeObserver(([entry]) => {
+          invalidateChapterScreens();
+          if (entry && !getBookData(bookKey)?.isFixedLayout) {
+            const { width, height } = entry.contentRect;
+            for (const { doc } of el.renderer.getContents()) applyViewportUnits(doc, width, height);
+          }
+          if (isLandscapeBox(el) === landscape) return;
+          landscape = !landscape;
+          for (const { doc } of el.renderer.getContents()) applyOrientationMedia(doc, landscape);
+        });
         observer.observe(el);
         return;
       }
@@ -561,13 +607,28 @@ const FoliateViewer: React.FC<{
       // UI language is the last resort, for a book that says nothing at all.
       const documentRtl = writingDir?.rtl || getDirFromUILanguage() === 'rtl' || false;
       const newRtl = getPageProgressionRTL(viewSettings.writingMode, bookDoc.dir, documentRtl);
-      if (viewSettings.vertical !== newVertical || viewSettings.rtl !== newRtl) {
+      // Continuous scrolling keeps the neighbouring sections mounted, and they
+      // finish loading *after* the one being read. A horizontal front matter
+      // landing last therefore used to rewrite a vertical book's writing mode
+      // to horizontal, and persist it: page turns, the scrollbar, the reading
+      // ruler and every overlay then disagreed with the text on screen (the
+      // footnote popup sized its box along the wrong axis for exactly this
+      // reason). Only the section the reader is actually on speaks for the
+      // book; a neighbour keeps its own direction locally, which is all the
+      // scrollbar position below needs from it.
+      const primaryDoc = renderer
+        ?.getContents?.()
+        .find((content) => content.index === renderer?.primaryIndex)?.doc;
+      const speaksForBook = !primaryDoc || primaryDoc === detail.doc;
+      if (speaksForBook && (viewSettings.vertical !== newVertical || viewSettings.rtl !== newRtl)) {
         viewSettings.vertical = newVertical;
         viewSettings.rtl = newRtl;
         setViewSettings(bookKey, { ...viewSettings });
       }
 
       if (!bookData?.isFixedLayout) {
+        const view = viewRef.current;
+        if (view) applyViewportUnits(detail.doc, view.clientWidth, view.clientHeight);
         mountAdditionalFonts(detail.doc, isCJKLang(bookData.book?.primaryLanguage));
       }
 
@@ -583,7 +644,7 @@ const FoliateViewer: React.FC<{
         }
       }
 
-      applyImageStyle(detail.doc);
+      applyImageStyle(detail.doc, useThemeStore.getState().isDarkMode, bookData?.isFixedLayout);
       applyScrollableStyle(detail.doc);
       applyTableTouchScroll(detail.doc);
       // Read the theme live: `useFoliateEvents` binds this handler once, so the
@@ -591,6 +652,7 @@ const FoliateViewer: React.FC<{
       applyThemeModeClass(detail.doc, useThemeStore.getState().isDarkMode);
       applyScrollModeClass(detail.doc, viewSettings.scrolled || false);
       applyEinkModeAttribute(detail.doc, viewSettings.isEink || false);
+      if (viewRef.current) applyOrientationMedia(detail.doc, isLandscapeBox(viewRef.current));
       applyScrollbarStyle(document, viewSettings.hideScrollbar || false);
       keepTextAlignment(detail.doc);
       handleA11yNavigation(viewRef.current, detail.doc, {
@@ -1117,9 +1179,10 @@ const FoliateViewer: React.FC<{
     const showDoubleBorderFooter = showDoubleBorder && viewSettings.showFooter;
     const showTopHeader = viewSettings.showHeader && !viewSettings.vertical;
     // The bottom band is reserved only while the footer displays something
-    // there (and never in scrolled mode, where the info floats in pills) —
-    // see footerReservesBand. Otherwise the empty reservation shows as a
-    // full-width blank bar that steals space from the book text.
+    // there (and in scrolled mode only with Solid Footer on; otherwise the
+    // info floats in pills) — see footerReservesBand. Otherwise the empty
+    // reservation shows as a full-width blank bar that steals space from the
+    // book text.
     const showBottomFooter = footerReservesBand(viewSettings) && !viewSettings.vertical;
     const moreTopInset = showTopHeader ? Math.max(0, 16 - insets.top) : 0;
     // Only the persistent 'minimal' card reserves a band; the 'full' one
@@ -1135,7 +1198,13 @@ const FoliateViewer: React.FC<{
     // The drawing dock stays up for the whole drawing session, so the text
     // makes room for it instead of running underneath.
     const drawingDock = viewState?.drawingEnabled ? getDrawingDockClearance(gridInsets) : null;
-    const topMargin = (showTopHeader ? insets.top : viewInsets.top) + moreTopInset;
+    // Vertical mode cannot scroll lines vertically out from under a top safe-area
+    // inset (Dynamic Island/notch). Preserve gridInsets.top while dividing out
+    // foliate-js's 1.5x vertical marginTop multiplier so effective padding-top is
+    // gridInsets.top + viewInsets.top * 1.5, leaving horizontal mode unchanged.
+    const topMargin = viewSettings.vertical
+      ? gridInsets.top / 1.5 + viewInsets.top
+      : (showTopHeader ? insets.top : viewInsets.top) + moreTopInset;
     // On iPhone Duo the horizontal safe-area insets are applied to the viewer
     // container itself (see the render below), not folded into these margins:
     // the paginator treats a horizontal margin as a gutter and puts only half
@@ -1269,6 +1338,7 @@ const FoliateViewer: React.FC<{
           applyFixedlayoutStyles(doc, pageSettings, undefined, bookData?.book?.format);
         }
         applyThemeModeClass(doc, isDarkMode);
+        classifyAndTagStandaloneDiagrams(doc, isDarkMode, bookData?.isFixedLayout);
         applyScrollModeClass(doc, viewSettings.scrolled || false);
         applyEinkModeAttribute(doc, viewSettings.isEink || false);
         applyScrollbarStyle(document, viewSettings.hideScrollbar || false);
@@ -1399,6 +1469,32 @@ const FoliateViewer: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewSettings?.vertical]);
 
+  // The max inline size depends on the window (a near-square window trims it
+  // on touch devices, and vertical writing measures the longer screen axis),
+  // so a resize re-resolves it; otherwise a maximized window keeps the ceiling
+  // the book opened with and leaves a band on each side (#7510). Only a changed
+  // value is written, since each write re-lays out the page, and a drag is
+  // resolved once it settles. Settings are read when it fires, not captured.
+  useEffect(() => {
+    if (bookDoc.rendition?.layout === 'pre-paginated') return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const handleResize = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const renderer = viewRef.current?.renderer;
+        const viewSettings = getViewSettings(bookKey);
+        if (!renderer || !viewSettings) return;
+        applyRendererLayout(renderer, getCurrentRendererLayout(viewSettings), bookDoc.rendition);
+      }, 150);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookKey, bookDoc]);
+
   // iPhone Duo: folding, unfolding, turning the device or flipping book mode
   // changes how many pages the display shows. The paginator keeps the
   // reading position across the re-layout. The layout is resolved here from
@@ -1463,6 +1559,7 @@ const FoliateViewer: React.FC<{
     // footerReservesBand inputs: the band must collapse/return live when the
     // user flips these settings.
     viewSettings?.showStickyProgressBar,
+    viewSettings?.solidScrolledFooter,
     viewSettings?.showRemainingTime,
     viewSettings?.showRemainingPages,
     viewSettings?.showProgressInfo,
@@ -1537,30 +1634,7 @@ const FoliateViewer: React.FC<{
           <Spinner loading={true} />
         </div>
       )}
-      {syncState === 'conflict' && conflictDetails && (
-        <KOSyncConflictResolver
-          details={conflictDetails}
-          onResolveWithLocal={resolveWithLocal}
-          onResolveWithRemote={resolveWithRemote}
-          onClose={resolveWithLocal}
-        />
-      )}
-      {bookOrbitSync.syncState === 'conflict' && bookOrbitSync.conflictDetails && (
-        <KOSyncConflictResolver
-          details={bookOrbitSync.conflictDetails}
-          onResolveWithLocal={bookOrbitSync.resolveWithLocal}
-          onResolveWithRemote={bookOrbitSync.resolveWithRemote}
-          onClose={bookOrbitSync.resolveWithLocal}
-        />
-      )}
-      {grimmorySync.syncState === 'conflict' && grimmorySync.conflictDetails && (
-        <KOSyncConflictResolver
-          details={grimmorySync.conflictDetails}
-          onResolveWithLocal={grimmorySync.resolveWithLocal}
-          onResolveWithRemote={grimmorySync.resolveWithRemote}
-          onClose={grimmorySync.resolveWithLocal}
-        />
-      )}
+      <PositionFollowers bookKey={bookKey} viewRef={viewRef} />
     </>
   );
 };

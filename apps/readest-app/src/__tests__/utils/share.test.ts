@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import { buildShareUrl, parseShareDeepLink } from '@/utils/share';
 import { SHARE_BASE_URL } from '@/services/constants';

@@ -388,10 +388,13 @@ private final class SelectionTouchObserver: UIGestureRecognizer {
     forward("touchstart", touch: touch)
   }
 
+  /// Forwards the tracked finger at up to 60 Hz so claimed edge turns can
+  /// continue when WebKit suppresses DOM touch events. Other touches are ignored.
   override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
     guard let touch = trackedTouch, touches.contains(touch) else { return }
-    // Match Android's ~10/s bridge rate; start/end/cancel are never throttled.
-    guard touch.timestamp - lastMoveTime >= 0.1 else { return }
+    // Edge page turns also use this stream when WebKit loses the DOM touch.
+    // Keep their fallback finger tracking at display cadence, rather than 10Hz.
+    guard touch.timestamp - lastMoveTime >= 1.0 / 60.0 else { return }
     lastMoveTime = touch.timestamp
     forward("touchmove", touch: touch)
   }
@@ -1787,6 +1790,12 @@ class NativeBridgePlugin: Plugin {
       }
       var query = secureItemBaseQuery(args.key)
       query[kSecValueData as String] = data
+      if args.deviceBound == true {
+        // Device-bound items never migrate to another device (device-to-device
+        // transfer or restore), so their absence proves this app container
+        // moved to a new physical device (#7558).
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+      }
       // Replace any existing entry. Delete-then-add keeps the
       // accessibility class consistent across SDK versions.
       SecItemDelete(query as CFDictionary)
@@ -2601,6 +2610,9 @@ class SyncPassphraseSetArgs: Decodable {
 class SecureItemSetArgs: Decodable {
   let key: String
   let value: String
+  // When true, store with ThisDeviceOnly accessibility so the item does
+  // not migrate with the app container to another device (#7558).
+  let deviceBound: Bool?
 }
 
 class SecureItemGetArgs: Decodable {

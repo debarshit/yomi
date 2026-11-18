@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from 'vitest';
 import { BRAND_NAME } from '@/services/branding';
 import {

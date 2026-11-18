@@ -23,6 +23,7 @@ import { useNotebookStore } from '@/store/notebookStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useCustomDictionaryStore } from '@/store/customDictionaryStore';
 import { useBuddyReadStore } from '@/store/buddyReadStore';
+import { useVocabularyStore } from '@/store/vocabularyStore';
 import { isSystemDictionaryEnabled } from '@/services/dictionaries/registry';
 import { invokeSystemDictionary } from '@/services/dictionaries/systemDictionary';
 import { buildSelectionContext } from '@/services/dictionaries/contextDictionary';
@@ -87,7 +88,11 @@ import {
   removeEmptyAnnotationPlaceholder,
   resolveAnnotationClick,
 } from '../../utils/annotatorUtil';
-import { buildAnnotationIndex, selectLocationAnnotations } from '../../utils/annotationIndex';
+import {
+  type AnnotationIndex,
+  buildAnnotationIndex,
+  selectLocationAnnotations,
+} from '../../utils/annotationIndex';
 import { findContentAtPoint } from '../../utils/crossDocSelection';
 import {
   expandAllRenderedSections,
@@ -145,6 +150,57 @@ const isSameRange = (a: Range, b: Range) =>
   a.endContainer === b.endContainer &&
   a.endOffset === b.endOffset;
 
+// A page turn writes the book's progress and location. What follows them, drawing the shown page's
+// annotations, the BookOrbit and Grimmory notes passes and the Hardcover and Pagebound position
+// pushes, lives here, so a turn re-renders this and not the annotator with its popups and toolbars.
+const PositionFollowers: React.FC<{
+  bookKey: string;
+  annotationIndex: AnnotationIndex;
+  translationEpoch: number;
+}> = ({ bookKey, annotationIndex, translationEpoch }) => {
+  const getView = useReaderStore((s) => s.getView);
+  const progress = useBookProgress(bookKey);
+  useBookOrbitNotesSync(bookKey);
+  useGrimmoryNotesSync(bookKey);
+  useHardcoverSync(bookKey);
+
+  useEffect(() => {
+    if (!progress) return;
+    const { location } = progress;
+    const view = getView(bookKey);
+    // Single pass over the *current chapter's* candidates: classify each
+    // one into the in-page annotations / notes lists. Using the bucket
+    // keeps this fast even when the user has thousands of highlights
+    // elsewhere in the book.
+    const { annotations, notes } = selectLocationAnnotations(annotationIndex, location);
+
+    try {
+      Promise.all(annotations.map((annotation) => view?.addAnnotation(annotation)));
+      Promise.all(
+        notes.map((note) => view?.addAnnotation({ ...note, value: `${NOTE_PREFIX}${note.cfi}` })),
+      );
+      // Fan-out for any annotation flagged `global`. Semantics is
+      // book-wide, so we don't filter by `location` here: every note
+      // with `global=true` gets expanded across every section that
+      // happens to be rendered right now. Sections rendered later are
+      // covered by `onCreateOverlay`. Using the pre-built `globals`
+      // array avoids re-walking booknotes per page turn.
+      for (const annotation of annotationIndex.globals) {
+        // Same stale-index guard as selectLocationAnnotations: a global deleted
+        // in place after the memoized index was built must not be re-fanned out
+        // across sections, which would orphan its overlays (#4773).
+        if (annotation.deletedAt) continue;
+        if (view) expandAllRenderedSections(view, annotation);
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress, annotationIndex, translationEpoch]);
+
+  return null;
+};
+
 const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?: Insets }> = ({
   bookKey,
   contentInsets,
@@ -155,7 +211,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
   const { user } = useAuth();
   const { settings, setSettingsDialogBookKey, setSettingsDialogOpen, setActiveSettingsItemId } =
     useSettingsStore();
-  const { isDarkMode, isIPhoneDuo, themeCode } = useThemeStore();
+  const { isDarkMode, themeCode } = useThemeStore();
   // Per-field selectors — see store/readerProgressStore.ts header for the
   // "destructure-subscribes-the-whole-store" rationale.
   const getConfig = useBookDataStore((s) => s.getConfig);
@@ -175,10 +231,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
   const saveBooknoteNoteText = useSaveBooknoteNoteText(bookKey);
 
   useNotesSync(bookKey);
-  useBookOrbitNotesSync(bookKey);
-  useGrimmoryNotesSync(bookKey);
   useReadwiseSync(bookKey);
-  useHardcoverSync(bookKey);
   useNotionSync(bookKey);
   useObsidianSync(bookKey);
 
@@ -191,11 +244,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
 
   const osPlatform = getOSPlatform();
   const config = getConfig(bookKey)!;
-  // Reactive: subscribe to THIS book's progress via the dedicated
-  // progress store. This is the only piece of data we need to react to
-  // per page turn — the `useEffect(..., [progress])` below uses it to
-  // re-apply local-page annotations after each relocate.
-  const progress = useBookProgress(bookKey)!;
   const bookData = getBookData(bookKey)!;
   const view = getView(bookKey);
   const viewSettings = getViewSettings(bookKey)!;
@@ -203,7 +251,17 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
 
   const containerRef = React.useRef<HTMLDivElement>(null);
 
-  const [selection, setSelection] = useState<TextSelection | null>(null);
+  const [selection, setSelectionState] = useState<TextSelection | null>(null);
+  // Counts the selections and tapped highlights shown, so a popup dismiss that
+  // its throttle held back can tell a popup opened after it was asked for.
+  const selectionShownRef = useRef(0);
+  const setSelection = useCallback<React.Dispatch<React.SetStateAction<TextSelection | null>>>(
+    (value) => {
+      if (value && typeof value !== 'function') selectionShownRef.current++;
+      setSelectionState(value);
+    },
+    [],
+  );
   const [translationEpoch, setTranslationEpoch] = useState(0);
   const [showAnnotPopup, setShowAnnotPopup] = useState(false);
   const [showDictionaryPopup, setShowDictionaryPopup] = useState(false);
@@ -369,14 +427,11 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     if (!selection || !selection.text) return;
     const gridFrame = document.querySelector(`#gridcell-${bookKey}`);
     if (!gridFrame) return;
-    // On iPhone Duo clamp to the safe region, not the physical cell (its
-    // status-bar strip can otherwise sit under a popup, #6307). The points come
-    // back relative to that region; they are shifted to cell coordinates below.
-    const { rect, origin } = getPopupBounds(
-      gridFrame.getBoundingClientRect(),
-      gridInsets,
-      isIPhoneDuo,
-    );
+    // Clamp to the safe region, not the physical cell (the Dynamic Island, a
+    // cutout or iPhone Duo's status strip can otherwise sit under a popup,
+    // #6307, #7389). The points come back relative to that region; they are
+    // shifted to cell coordinates below.
+    const { rect, origin } = getPopupBounds(gridFrame.getBoundingClientRect(), gridInsets);
     const triangPos = getToolbarPosition(selection, rect);
     const annotPopupPos = getPopupPosition(
       triangPos,
@@ -416,13 +471,12 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     setTranslatorPopupPosition(offsetPosition(transPopupPos, origin));
     setProofreadPopupPosition(offsetPosition(proofreadPopupPos, origin));
     setTrianglePosition(offsetPosition(triangPos, origin));
-    // Re-clamp when the cell's insets change, which only iPhone Duo uses;
-    // elsewhere the deps are unchanged.
+    // Re-clamp when the cell's insets change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selection,
     bookKey,
-    isIPhoneDuo && gridInsets,
+    gridInsets,
     viewSettings.vertical,
     highlightOptionsVisible,
     annotPopupWidth,
@@ -494,21 +548,22 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
   );
   // The lookup as the vocabulary builder saves it (#789), filed under the
   // same language Word Lens reads its marks from.
-  const dictionaryCapture = useMemo<VocabularyCapture | undefined>(
-    () =>
-      showDictionaryPopup && selection?.text
-        ? {
-            lang: vocabularyLang(bookData.book?.primaryLanguage),
-            occurrence: {
-              sentence: (selection.range && sentenceAt(selection.range)) || selection.text,
-              bookHash: bookData.book?.hash,
-              bookTitle: bookData.book?.title,
-              bookAuthor: bookData.book?.author,
-              cfi: selection.cfi,
-              at: Date.now(),
-            },
-          }
-        : undefined,
+  const getDictionaryCapture = (): VocabularyCapture | undefined =>
+    selection?.text
+      ? {
+          lang: vocabularyLang(bookData.book?.primaryLanguage),
+          occurrence: {
+            sentence: (selection.range && sentenceAt(selection.range)) || selection.text,
+            bookHash: bookData.book?.hash,
+            bookTitle: bookData.book?.title,
+            bookAuthor: bookData.book?.author,
+            cfi: selection.cfi,
+            at: Date.now(),
+          },
+        }
+      : undefined;
+  const dictionaryCapture = useMemo(
+    () => (showDictionaryPopup ? getDictionaryCapture() : undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [showDictionaryPopup, selection],
   );
@@ -521,9 +576,13 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     [primaryLang, transformCtx],
   );
 
+  // Throttled for the scroll handler, which dismisses on every scroll event. A
+  // dismiss asked for within 500 ms of the last runs when that time is up, by
+  // when a new popup may be open: it closes only what was showing when asked.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const handleDismissPopup = useCallback(
-    throttle(() => {
+  const dismissPopup = useCallback(
+    throttle((selectionShown: number) => {
+      if (selectionShown !== selectionShownRef.current) return;
       instantLookupDeselectedRef.current = false;
       setSelection(null);
       setShowAnnotPopup(false);
@@ -536,6 +595,10 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
       setNoteEditorTarget(null);
     }, 500),
     [],
+  );
+  const handleDismissPopup = useCallback(
+    () => dismissPopup(selectionShownRef.current),
+    [dismissPopup],
   );
 
   const {
@@ -1412,14 +1475,11 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
       pendingWordLensDictRef.current = false;
       const gridFrame = document.querySelector(`#gridcell-${bookKey}`);
       if (!gridFrame) return;
-      // On iPhone Duo clamp to the safe region, not the physical cell (its
-      // status-bar strip can otherwise sit under a popup, #6307). The points come
-      // back relative to that region; they are shifted to cell coordinates below.
-      const { rect, origin } = getPopupBounds(
-        gridFrame.getBoundingClientRect(),
-        gridInsets,
-        isIPhoneDuo,
-      );
+      // Clamp to the safe region, not the physical cell (the Dynamic Island, a
+      // cutout or iPhone Duo's status strip can otherwise sit under a popup,
+      // #6307, #7389). The points come back relative to that region; they are
+      // shifted to cell coordinates below.
+      const { rect, origin } = getPopupBounds(gridFrame.getBoundingClientRect(), gridInsets);
       const triangPos = getToolbarPosition(selection, rect);
       const annotPopupPos = getPopupPosition(
         triangPos,
@@ -1512,39 +1572,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
 
   const annotationIndex = useMemo(() => buildAnnotationIndex(combinedNotes), [combinedNotes]);
 
-  useEffect(() => {
-    if (!progress) return;
-    const { location } = progress;
-    // Single pass over the *current chapter's* candidates: classify each
-    // one into the in-page annotations / notes lists. Using the bucket
-    // keeps this fast even when the user has thousands of highlights
-    // elsewhere in the book.
-    const { annotations, notes } = selectLocationAnnotations(annotationIndex, location);
-
-    try {
-      Promise.all(annotations.map((annotation) => view?.addAnnotation(annotation)));
-      Promise.all(
-        notes.map((note) => view?.addAnnotation({ ...note, value: `${NOTE_PREFIX}${note.cfi}` })),
-      );
-      // Fan-out for any annotation flagged `global`. Semantics is
-      // book-wide, so we don't filter by `location` here: every note
-      // with `global=true` gets expanded across every section that
-      // happens to be rendered right now. Sections rendered later are
-      // covered by `onCreateOverlay`. Using the pre-built `globals`
-      // array avoids re-walking booknotes per page turn.
-      for (const annotation of annotationIndex.globals) {
-        // Same stale-index guard as selectLocationAnnotations: a global deleted
-        // in place after the memoized index was built must not be re-fanned out
-        // across sections, which would orphan its overlays (#4773).
-        if (annotation.deletedAt) continue;
-        if (view) expandAllRenderedSections(view, annotation);
-      }
-    } catch (e) {
-      console.warn(e);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, annotationIndex, translationEpoch]);
-
   // Translations are appended long after a section's annotations were drawn, so
   // a highlight anchored inside translated text has nothing to attach to at
   // draw time. Bumping this re-runs the draw effect above once the inserts
@@ -1578,7 +1605,11 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
   }, [selection?.cfi, showAnnotationNotes, config.booknotes]);
 
   const handleShowAnnotPopup = () => {
-    if (!appService?.isMobile) {
+    // Not while the note editor is open: the highlight Annotate creates
+    // re-publishes the selection, and focusing the container here would take
+    // the caret from the editor's textarea, so typing ran the reader's
+    // shortcuts instead (#7511).
+    if (!appService?.isMobile && !noteEditorTarget) {
       containerRef.current?.focus();
     }
     setShowAnnotPopup(true);
@@ -1709,6 +1740,8 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     // Cameras open the HTTPS form; App Links hand it to an installed app.
     const qrUrl = getSelectionLink('web') ?? undefined;
     const { book } = bookData;
+    // The passage's chapter, before the page can turn while the cover loads.
+    const chapter = getBookProgress(bookKey)?.sectionLabel;
     handleDismissPopupAndSelection();
     let coverUrl: string | undefined;
     try {
@@ -1722,7 +1755,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
         text,
         title: book?.title,
         author: book?.author,
-        chapter: progress?.sectionLabel,
+        chapter,
         date: new Date().toLocaleDateString(getLocale(), {
           year: 'numeric',
           month: 'short',
@@ -1801,7 +1834,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
         color,
         text: part.text,
         note: '',
-        page: progress.page,
+        page: getBookProgress(bookKey)?.page,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
@@ -2010,8 +2043,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
     // A popup selection already carries the footnote target's href; the
     // current reading position would file the note under the wrong section.
     if (!selection.popup) {
-      const { sectionHref: href } = progress;
-      selection.href = href;
+      selection.href = getBookProgress(bookKey)?.sectionHref;
     }
     // A note goes onto an existing highlight as it is, without restyling it to
     // the last used style and color; only unhighlighted parts get a highlight.
@@ -2126,10 +2158,19 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
       // right-click → Look Up presentation).
       const rect = selection.range ? getRangeRectInWebview(selection.range) : null;
       const style = selection.range ? getRangeTextStyleInWebview(selection.range) : null;
-      void invokeSystemDictionary(
-        selection.text,
+      const word = selection.text;
+      const lookup = invokeSystemDictionary(
+        word,
         rect ? { rect, style: style ?? undefined } : undefined,
       );
+      const capture =
+        dictSettings.saveLookupsToVocabulary !== false ? getDictionaryCapture() : undefined;
+      if (capture?.occurrence) {
+        const { lang, occurrence } = capture;
+        void lookup.then((launched) => {
+          if (launched) useVocabularyStore.getState().recordLookup({ word, lang, occurrence });
+        });
+      }
       handleDismissPopupAndSelection();
       return;
     }
@@ -2911,6 +2952,11 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets; gridInsets?:
   return (
     <div ref={containerRef} role='toolbar' tabIndex={-1}>
       <PageTurnHint bookKey={bookKey} contentInsets={contentInsets} hint={turnHint} />
+      <PositionFollowers
+        bookKey={bookKey}
+        annotationIndex={annotationIndex}
+        translationEpoch={translationEpoch}
+      />
       {showDictionaryPopup &&
         (() => {
           // Below `sm` (or short landscape) we present the dictionary as a

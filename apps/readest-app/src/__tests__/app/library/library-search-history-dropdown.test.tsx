@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -158,5 +159,22 @@ describe('library search history dropdown', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear search history' }));
     expect(loadLibrarySearchHistory()).toEqual([]);
     expect(loadLibrarySearchHistory('books')).toEqual(['Dune']);
+  });
+
+  it('shows the fielded-search syntax under book history only (#7370)', () => {
+    addLibrarySearchHistory('Dune', 'books');
+    addLibrarySearchHistory('spice');
+    render(<Header />);
+    fireEvent.focus(screen.getByRole('textbox'));
+    const history = screen.getByRole('region', { name: 'Search history' });
+    expect(history.textContent).toContain(
+      'Search by field: author:tolkien or tag:"science fiction"',
+    );
+    cleanup();
+    render(<Header target='text' />);
+    fireEvent.focus(screen.getByRole('textbox'));
+    expect(screen.getByRole('region', { name: 'Search history' }).textContent).not.toContain(
+      'Search by field',
+    );
   });
 });

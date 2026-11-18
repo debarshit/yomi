@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { journalBookshelfOperation } from '@/services/bookshelves/journal';
 import { describe, it, expect } from 'vitest';
 import {
@@ -39,6 +40,7 @@ function makeSettings(overrides: Partial<SystemSettings> = {}): SystemSettings {
     librarySortBy: 'title',
     libraryColumns: 4,
     replicaDeviceId: 'device-uuid-aaa',
+    deviceAnchor: 'device-anchor-aaa',
     lastSyncedAtBooks: 1234,
     lastSyncedAtConfigs: 1235,
     lastSyncedAtNotes: 1236,
@@ -174,6 +176,7 @@ describe('sanitizeSettingsForBackup - blacklist', () => {
   it('strips per-device identity fields', () => {
     const out = rec(sanitizeSettingsForBackup(makeSettings()));
     expect(out['replicaDeviceId']).toBeUndefined();
+    expect(out['deviceAnchor']).toBeUndefined();
     expect(rec(out['kosync'])['deviceId']).toBeUndefined();
     expect(rec(out['googleDrive'])['deviceId']).toBeUndefined();
     // Non-identity Drive settings still travel with the backup.

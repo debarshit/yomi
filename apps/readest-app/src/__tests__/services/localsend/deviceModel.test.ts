@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { BRAND_NAME } from '@/services/branding';
 import { describe, expect, it } from 'vitest';
 import { ipTag, localSendDeviceModel, preferredIpTag } from '@/services/localsend/deviceModel';

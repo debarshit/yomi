@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import type { Book } from '@/types/book';
@@ -65,7 +66,13 @@ const h = vi.hoisted(() => {
       pageinfo: { current: 13, total: 100 },
       section: { current: 0, total: 0 },
     } as Record<string, unknown> | null,
-    config: { updatedAt: 1, xpointer: '' as string | undefined },
+    // No `location` by default: nothing has been read in this book on this
+    // device. Tests that model a device with a position of its own set one.
+    config: {
+      updatedAt: 1,
+      xpointer: '' as string | undefined,
+      location: undefined as string | undefined,
+    },
     // Remote payload returned by the server on GET.
     remote: {
       progress: XPOINTER,
@@ -220,7 +227,7 @@ beforeEach(() => {
     pageinfo: { current: 13, total: 100 },
     section: { current: 0, total: 0 },
   };
-  h.config = { updatedAt: 1, xpointer: '' };
+  h.config = { updatedAt: 1, xpointer: '', location: undefined };
   h.remote = {
     progress: h.XPOINTER,
     percentage: 0.14,
@@ -235,7 +242,7 @@ beforeEach(() => {
   localStorage.clear();
   h.getProgressMock.mockReset();
   h.getProgressMock.mockResolvedValue(h.remote);
-  h.updateProgressMock.mockClear();
+  h.updateProgressMock.mockReset();
   h.goTo.mockClear();
   h.goToFraction.mockClear();
   h.view.select.mockClear();
@@ -656,6 +663,122 @@ describe('useKOSync — no phantom re-prompt after resolving (#5527)', () => {
     expect(result.current.conflictDetails).toBeNull();
   });
 
+  test('ignores only an acknowledged push by this reader on resume', async () => {
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+    expect(result.current.syncState).toBe('conflict');
+
+    await act(async () => {
+      result.current.resolveWithLocal();
+      await flushMicrotasks();
+    });
+
+    const echo = {
+      ...h.remote,
+      timestamp: Number(h.remote['timestamp']) + 1,
+      device: 'Readest (Android)',
+      device_id: 'this-device',
+    };
+    h.updateProgressMock.mockImplementation(async (_book, progress, percentage) => {
+      h.getProgressMock.mockResolvedValue({ ...echo, progress, percentage });
+      return true;
+    });
+    h.localProgress = { ...h.localProgress, pageinfo: { current: 11, total: 100 } };
+    await act(async () => {
+      h.activeCallback?.(false);
+      await flushMicrotasks();
+    });
+    h.localProgress = { ...h.localProgress, pageinfo: { current: 13, total: 100 } };
+    await act(async () => {
+      h.activeCallback?.(true);
+      await flushMicrotasks();
+    });
+
+    expect(result.current.syncState).toBe('synced');
+    expect(result.current.conflictDetails).toBeNull();
+    expect(h.goTo).not.toHaveBeenCalled();
+
+    h.getProgressMock.mockResolvedValue({ ...echo, device_id: 'other-device' });
+    await act(async () => {
+      h.activeCallback?.(true);
+      await flushMicrotasks();
+    });
+
+    expect(result.current.syncState).toBe('conflict');
+    expect(result.current.conflictDetails?.remote.device_id).toBe('other-device');
+  });
+
+  test('a same-device position this view did not send still prompts on resume', async () => {
+    h.getProgressMock.mockResolvedValue(null);
+    h.updateProgressMock.mockResolvedValue(true);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+    await advance(KOSYNC_PUSH_DEBOUNCE_MS);
+
+    const remote = { ...h.remote, device_id: 'this-device', percentage: 0.6 };
+    h.getProgressMock.mockResolvedValue(remote);
+    await act(async () => {
+      h.activeCallback?.(true);
+      await flushMicrotasks();
+    });
+
+    expect(result.current.syncState).toBe('conflict');
+    expect(result.current.conflictDetails?.remote.percentage).toBe(0.6);
+  });
+
+  test('backgrounding and resuming preserves an unresolved same-device conflict', async () => {
+    h.getProgressMock.mockResolvedValue({ ...h.remote, device_id: 'this-device', percentage: 0.6 });
+    h.updateProgressMock.mockResolvedValue(false);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+    expect(result.current.syncState).toBe('conflict');
+    const conflict = result.current.conflictDetails;
+
+    await act(async () => {
+      h.activeCallback?.(false);
+      h.activeCallback?.(true);
+      await flushMicrotasks();
+    });
+    await advance(KOSYNC_PUSH_DEBOUNCE_MS);
+
+    expect(result.current.syncState).toBe('conflict');
+    expect(result.current.conflictDetails).toBe(conflict);
+    expect(h.updateProgressMock).not.toHaveBeenCalled();
+  });
+
+  test('returning right after leaving waits for the push sent on leaving (#7472)', async () => {
+    let server: Record<string, unknown> | null = null;
+    // A GET reads the server when sent and answers a little later, so an
+    // upload can land in between.
+    h.getProgressMock.mockImplementation(async () => {
+      const reply = server;
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      return reply;
+    });
+    h.updateProgressMock.mockImplementation(async (_book, progress, percentage) => {
+      server = { progress, percentage, timestamp: 1, device_id: 'this-device' };
+      return true;
+    });
+    h.localProgress = { ...h.localProgress, pageinfo: { current: 11, total: 100 } };
+    const { result, rerender } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+    await advance(KOSYNC_PUSH_DEBOUNCE_MS);
+    expect(server).toMatchObject({ percentage: 0.12 });
+
+    // Read Aloud moves the reader 2% on before the app is left and reopened.
+    h.localProgress = { ...h.localProgress, pageinfo: { current: 13, total: 100 } };
+    rerender();
+    await act(async () => {
+      h.activeCallback?.(false);
+      h.activeCallback?.(true);
+      await flushMicrotasks();
+    });
+
+    expect(server).toMatchObject({ percentage: 0.14 });
+    expect(result.current.syncState).toBe('synced');
+    expect(result.current.conflictDetails).toBeNull();
+  });
+
   test('a NEW remote report after resolution still prompts', async () => {
     const { result } = renderHook(() => useKOSync('h1-view1'));
     await settle();
@@ -809,6 +932,146 @@ describe('useKOSync — provider-scoped manual sync events (#6029)', () => {
   });
 });
 
+describe('useKOSync — a book just added to this device (silent strategy)', () => {
+  // The book was read on another device, which left its position on the
+  // server. It is then added to this device and opened under "Always use
+  // latest" (silent). The record this device creates for it has no position,
+  // and its updatedAt is stamped when the record is created, later than the
+  // server's last sync. So the timestamp rule kept the empty local record: the
+  // reader stayed at the start of the book, then pushed that start to the
+  // server, which dragged the other device back to the start as well.
+  const START_CFI = 'epubcfi(/6/2!/4/2/2)';
+  const REMOTE_CFI = 'epubcfi(/6/650!/4/2/6)';
+  const SAVED_CFI = 'epubcfi(/6/4!/4/2/2)';
+  const startProgress = () => ({
+    location: START_CFI,
+    sectionLabel: 'Chapter 1',
+    pageinfo: { current: 0, total: 100 },
+    section: { current: 0, total: 0 },
+  });
+
+  beforeEach(() => {
+    h.settings.kosync.strategy = 'silent';
+    // Created on this open: the local record is newer than the server's report.
+    h.config = { updatedAt: Date.now(), xpointer: '', location: undefined };
+    h.remote = {
+      progress: h.XPOINTER,
+      percentage: 0.6,
+      timestamp: Math.floor(Date.now() / 1000) - 3600,
+      device_id: 'other-device',
+    };
+    h.getProgressMock.mockResolvedValue(h.remote);
+  });
+
+  // Opening the book: the view's first relocate writes the start of the book
+  // into both the config and the progress store, and only then can the pull
+  // run. Whether this device had a position must be read before that.
+  const openAtStart = async (rerender: () => void) => {
+    h.config.location = START_CFI;
+    h.localProgress = startProgress();
+    rerender();
+    await settle();
+  };
+
+  test('applies the server position when this device has none, although the local record is newer', async () => {
+    h.localProgress = null;
+    const { rerender } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+    expect(h.getProgressMock).not.toHaveBeenCalled();
+
+    await openAtStart(rerender);
+
+    expect(h.getProgressMock).toHaveBeenCalled();
+    expect(h.goTo).toHaveBeenCalledWith(REMOTE_CFI);
+  });
+
+  test('keeps a position this device already has when the local record is newer', async () => {
+    h.config.location = SAVED_CFI;
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(h.getProgressMock).toHaveBeenCalled();
+    expect(h.goTo).not.toHaveBeenCalled();
+    expect(result.current.syncState).toBe('synced');
+  });
+
+  test('still applies a newer server position over a position this device has', async () => {
+    h.config.location = SAVED_CFI;
+    h.remote = { ...h.remote, timestamp: Math.floor(Date.now() / 1000) + 10_000 };
+    h.getProgressMock.mockResolvedValue(h.remote);
+    renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(h.goTo).toHaveBeenCalledWith(REMOTE_CFI);
+  });
+
+  test('after the server position is applied, a re-pull is back on the timestamp rule', async () => {
+    h.localProgress = null;
+    const { rerender } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+    await openAtStart(rerender);
+    expect(h.goTo).toHaveBeenCalledTimes(1);
+
+    // The device now has a position of its own. The window loses and regains
+    // focus, which pulls again; the server still holds the older report, and
+    // it must not move the reader a second time.
+    await act(async () => {
+      h.activeCallback?.(false);
+      await flushMicrotasks();
+    });
+    await act(async () => {
+      h.activeCallback?.(true);
+      await flushMicrotasks();
+    });
+
+    expect(h.goTo).toHaveBeenCalledTimes(1);
+  });
+
+  test('when the first pull finds nothing, a later older report does not move the reader', async () => {
+    // Opened with no position here and none on the server; the user then reads
+    // on this device. A report older than that reading arrives afterwards: the
+    // timestamps decide, as for any book with a position.
+    h.getProgressMock.mockResolvedValueOnce(null);
+    h.localProgress = null;
+    const { rerender } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+    await openAtStart(rerender);
+    expect(h.goTo).not.toHaveBeenCalled();
+
+    h.config.updatedAt = Date.now() + 1000;
+    await act(async () => {
+      h.activeCallback?.(false);
+      await flushMicrotasks();
+    });
+    await act(async () => {
+      h.activeCallback?.(true);
+      await flushMicrotasks();
+    });
+
+    expect(h.getProgressMock).toHaveBeenCalledTimes(2);
+    expect(h.goTo).not.toHaveBeenCalled();
+  });
+
+  test('reading on while the first pull is on its way keeps the new position', async () => {
+    let answer: (value: typeof h.remote) => void = () => {};
+    h.getProgressMock.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    h.localProgress = null;
+    const { rerender } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+    await openAtStart(rerender);
+    expect(h.getProgressMock).toHaveBeenCalledTimes(1);
+
+    // The user turns a page before the server answers.
+    h.localProgress = { ...startProgress(), location: SAVED_CFI };
+    await act(async () => {
+      answer(h.remote);
+      await flushMicrotasks();
+    });
+
+    expect(h.goTo).not.toHaveBeenCalled();
+  });
+});
+
 describe('useKOSync — a remote position with only a percentage (#7330)', () => {
   // Grimmory reports progress made in its own reader as a percentage with
   // `progress: null`; for PDFs it never has a page to send. The pull must
@@ -938,6 +1201,126 @@ describe('useKOSync — fixed-layout page numbers (#7330)', () => {
     await advance(KOSYNC_PUSH_DEBOUNCE_MS + 500);
 
     expect(h.updateProgressMock).toHaveBeenCalledWith(h.book, '27', 27 / 70);
+  });
+});
+
+describe('useKOSync — Kavita zero-based percentage (#7503)', () => {
+  // Kavita reports a 1-based page number with a 0-based percentage
+  // ((page - 1) / total), while KOReader reports page / total. Deriving the
+  // total as page / percentage doubles it for Kavita: 2 / 0.09090909 = 22
+  // for an 11-page PDF.
+  const setupKavita = (localPage: number, remotePage: string, remotePercentage: number) => {
+    h.book.format = 'PDF';
+    h.localProgress = {
+      location: '0',
+      pageinfo: { current: localPage - 1, total: 11 },
+      section: { current: localPage - 1, total: 11 },
+    };
+    h.remote = {
+      ...h.remote,
+      progress: remotePage,
+      percentage: remotePercentage,
+      device: 'Kavita',
+    };
+    h.getProgressMock.mockResolvedValue(h.remote);
+  };
+
+  test('prompt: shows the real page count for page 2', async () => {
+    setupKavita(1, '2', 0.09090909);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(result.current.syncState).toBe('conflict');
+    expect(result.current.conflictDetails?.remote.preview).toBe('Page 2 of 11 (9.09%)');
+  });
+
+  test('prompt: shows the real page count for page 5', async () => {
+    setupKavita(1, '5', 0.36363637);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(result.current.conflictDetails?.remote.preview).toBe('Page 5 of 11 (36.36%)');
+  });
+
+  test('prompt: shows the real page count for page 10', async () => {
+    setupKavita(1, '10', 0.8181818);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(result.current.conflictDetails?.remote.preview).toBe('Page 10 of 11 (81.82%)');
+  });
+
+  test('prompt: handles the first page, where the percentage is zero', async () => {
+    setupKavita(5, '1', 0);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(result.current.syncState).toBe('conflict');
+    expect(result.current.conflictDetails?.remote.preview).toBe('Page 1 of 11 (0.00%)');
+  });
+
+  test('prompt: a KOReader-style report still shows the real page count', async () => {
+    setupKavita(1, '2', 2 / 11);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(result.current.conflictDetails?.remote.preview).toBe('Page 2 of 11 (18.18%)');
+  });
+
+  test('prompt: no phantom conflict when the report names the page already open', async () => {
+    setupKavita(2, '2', 0.09090909);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(result.current.syncState).toBe('synced');
+  });
+
+  test('prompt: no conflict when a report from this device names the page already open', async () => {
+    // 2 / 11 locally against 1 / 11 reported: more than the 1% same-device
+    // tolerance, but the same page.
+    setupKavita(2, '2', 0.09090909);
+    h.remote = { ...h.remote, device_id: 'this-device' };
+    h.getProgressMock.mockResolvedValue(h.remote);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(result.current.syncState).toBe('synced');
+  });
+
+  test('prompt: a report from a copy with another page count still compares percentages', async () => {
+    // Page 2 of a 40-page copy is not page 2 of this 11-page one.
+    setupKavita(2, '2', 2 / 40);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(result.current.syncState).toBe('conflict');
+    expect(result.current.conflictDetails?.remote.preview).toBe(
+      'Approximately page 2 of 40 (5.00%)',
+    );
+  });
+
+  test('prompt: a KOReader report is never read as zero-based', async () => {
+    // KOReader's page 2 of 22 has Kavita's numbers for page 2 of 11.
+    setupKavita(2, '2', 2 / 22);
+    h.remote = { ...h.remote, device: 'KOReader' };
+    h.getProgressMock.mockResolvedValue(h.remote);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(result.current.syncState).toBe('conflict');
+    expect(result.current.conflictDetails?.remote.preview).toBe(
+      'Approximately page 2 of 22 (9.09%)',
+    );
+  });
+
+  test('prompt: the same page of a copy one page longer still prompts', async () => {
+    setupKavita(5, '5', 5 / 12);
+    h.remote = { ...h.remote, device: 'KOReader' };
+    h.getProgressMock.mockResolvedValue(h.remote);
+    const { result } = renderHook(() => useKOSync('h1-view1'));
+    await settle();
+
+    expect(result.current.syncState).toBe('conflict');
   });
 });
 

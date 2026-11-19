@@ -1,5 +1,13 @@
 {
   "releases": {
+    "0.12.21": {
+      "date": "2026-11-19",
+      "notes": [
+        "Android: Fixed book imports when choosing files from device storage via system file picker",
+        "Android: Enhanced file picker to preserve native display names and file extensions for opaque URIs",
+        "Library: General stability improvements and bug fixes for book imports"
+      ]
+    },
     "0.12.20": {
       "date": "2026-11-06",
       "notes": [

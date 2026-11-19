@@ -284,4 +284,15 @@ jobs:
         run: |
           TRACK="${{ github.event.inputs.release_track || 'internal' }}"
           cd apps/readest-app
+          CHANGELOG_DIR="../../fastlane/metadata-play/android/en-US/changelogs"
+          mkdir -p "$CHANGELOG_DIR"
+          VERSION=$(jq -r '.version' package.json)
+          NOTES=$(jq -r --arg ver "$VERSION" '.releases[$ver].notes // empty | map("• " + .) | join("\n")' release-notes.json)
+          if [[ -n "$NOTES" ]]; then
+            if [[ ${#NOTES} -gt 480 ]]; then
+              NOTES="${NOTES:0:477}..."
+            fi
+            echo "$NOTES" > "$CHANGELOG_DIR/default.txt"
+            echo "📝 Generated changelog for v$VERSION in $CHANGELOG_DIR/default.txt"
+          fi
           pnpm exec dotenv -e .env.google-play.local -- bash -c "cd ../.. && fastlane android upload_${TRACK}"

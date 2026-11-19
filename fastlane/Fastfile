@@ -106,10 +106,10 @@ end
 def release_notes_text
   releases = JSON.parse(File.read(repo_path("apps/readest-app/release-notes.json")))["releases"]
   latest = releases.keys.max_by { |version| Gem::Version.new(version) }
-  releases[latest]["notes"]
+  notes = releases[latest]["notes"]
     .reject { |note| note =~ /\b(?:Android|Windows|Linux)\b/i }
     .map { |note| "– #{note}" }
-    .join("\n")
+  notes.empty? ? "– Performance improvements and bug fixes." : notes.join("\n")
 end
 
 # App Store "Promotional Text" (editable without a review). Passed inline, so it

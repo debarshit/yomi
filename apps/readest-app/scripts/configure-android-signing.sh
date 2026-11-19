@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$SCRIPT_DIR/configure-android.sh"
+
 APP_GRADLE="src-tauri/gen/android/app/build.gradle.kts"
 
 if [ ! -f "$APP_GRADLE" ]; then

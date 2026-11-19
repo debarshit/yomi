@@ -82,6 +82,7 @@ jobs:
           rm -rf src-tauri/gen/android
           pnpm tauri android init
           pnpm tauri icon public/icon.png
+          bash scripts/configure-android.sh
 
       - name: Configure Keystore (for Release builds)
         if: ${{ inputs.build_type == 'release' }}

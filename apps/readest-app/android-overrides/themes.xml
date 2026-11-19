@@ -1,0 +1,16 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+  <!-- Base application theme for Yomi. -->
+  <style name="Theme.yomi" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <item name="android:windowBackground">@drawable/splash_background</item>
+    <item name="android:statusBarColor">@android:color/transparent</item>
+    <item name="android:navigationBarColor">@android:color/transparent</item>
+    <item name="android:windowTranslucentStatus">false</item>
+    <item name="android:windowTranslucentNavigation">false</item>
+    <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    <item name="android:fitsSystemWindows">false</item>
+    <item name="android:windowActionBar">false</item>
+  </style>
+
+  <!-- Alias for backwards compatibility if referenced anywhere -->
+  <style name="Theme.readest" parent="Theme.yomi" />
+</resources>

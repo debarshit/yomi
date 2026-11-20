@@ -48,16 +48,33 @@ export type CustomTexture = BackgroundTexture & { path: string };
 export type CustomTextureInfo = Partial<BackgroundTexture> &
   Required<Pick<BackgroundTexture, 'path' | 'name'>>;
 
+const basePath = (process.env['NEXT_PUBLIC_BASE_PATH'] || '').replace(/\/$/, '');
+
 export const PREDEFINED_TEXTURES: BackgroundTexture[] = [
   { id: 'none', name: 'None', url: '', loaded: true },
-  { id: 'concrete', name: 'Concrete', url: '/images/concrete-texture.png', loaded: true },
-  { id: 'paper', name: 'Paper', url: '/images/paper-texture.png', loaded: true },
-  { id: 'sand', name: 'Sand', url: '/images/sand-texture.jpg', loaded: true },
-  { id: 'parchment', name: 'Parchment', url: '/images/parchment-paper.jpg', loaded: true },
-  { id: 'scrapbook', name: 'Scrapbook', url: '/images/scrapbook-texture.jpg', loaded: true },
-  { id: 'leaves', name: 'Leaves', url: '/images/leaves-pattern.jpg', loaded: true },
-  { id: 'moon', name: 'Moon Sky', url: '/images/moon-sky.jpg', loaded: true },
-  { id: 'night-sky', name: 'Night Sky', url: '/images/night-sky.jpg', loaded: true },
+  {
+    id: 'concrete',
+    name: 'Concrete',
+    url: `${basePath}/images/concrete-texture.png`,
+    loaded: true,
+  },
+  { id: 'paper', name: 'Paper', url: `${basePath}/images/paper-texture.png`, loaded: true },
+  { id: 'sand', name: 'Sand', url: `${basePath}/images/sand-texture.jpg`, loaded: true },
+  {
+    id: 'parchment',
+    name: 'Parchment',
+    url: `${basePath}/images/parchment-paper.jpg`,
+    loaded: true,
+  },
+  {
+    id: 'scrapbook',
+    name: 'Scrapbook',
+    url: `${basePath}/images/scrapbook-texture.jpg`,
+    loaded: true,
+  },
+  { id: 'leaves', name: 'Leaves', url: `${basePath}/images/leaves-pattern.jpg`, loaded: true },
+  { id: 'moon', name: 'Moon Sky', url: `${basePath}/images/moon-sky.jpg`, loaded: true },
+  { id: 'night-sky', name: 'Night Sky', url: `${basePath}/images/night-sky.jpg`, loaded: true },
 ];
 
 export function getTextureName(path: string): string {

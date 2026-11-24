@@ -8,6 +8,7 @@ import {
   useMemo,
   ReactNode,
   useEffect,
+  useRef,
 } from 'react';
 import posthog from 'posthog-js';
 import { supabase } from '@/utils/supabase';
@@ -45,6 +46,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
     return null;
   });
+  // logout() refreshes before signing out, which reports the session again.
+  const signingOut = useRef(false);
 
   const login = useCallback((newToken: string, newUser: User) => {
     console.log('Logging in to Biblophile account');
@@ -64,18 +67,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = useCallback(async () => {
     console.log('Logging out from Biblophile/Supabase account');
+    signingOut.current = true;
+    localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    setToken(null);
+    setUser(null);
+    posthog.reset();
     try {
       await supabase.auth.refreshSession();
     } catch (e) {
       console.warn('Supabase refreshSession failed:', e);
     } finally {
       await supabase.auth.signOut({ scope: 'local' });
-      posthog.reset();
-      localStorage.removeItem('token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user');
-      setToken(null);
-      setUser(null);
+      signingOut.current = false;
     }
   }, []);
 

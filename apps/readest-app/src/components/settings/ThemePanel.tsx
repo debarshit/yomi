@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   applyCustomTheme,
   CustomTheme,
-  generateDarkPalette,
-  generateLightPalette,
+  customThemeToTheme,
   Theme,
   themes,
   ThemeScope,
@@ -483,17 +482,7 @@ const ThemePanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterReset
 
   useEffect(() => {
     const customThemes = settings.globalReadSettings.customThemes ?? [];
-    setCustomThemes(
-      customThemes.map((customTheme) => ({
-        name: customTheme.name,
-        label: customTheme.label,
-        colors: {
-          light: generateLightPalette(customTheme.colors.light),
-          dark: generateDarkPalette(customTheme.colors.dark),
-        },
-        isCustomizable: true,
-      })),
-    );
+    setCustomThemes(customThemes.map(customThemeToTheme));
   }, [settings]);
 
   const handleSaveCustomTheme = (customTheme: CustomTheme) => {
@@ -532,12 +521,14 @@ const ThemePanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterReset
           bundleDir: textureInfo.bundleDir,
           byteSize: textureInfo.byteSize,
         });
+        // Save before the next await: a sync pull reloads the store from
+        // settings and can land mid-import, dropping unsaved images (#7671).
+        saveCustomTextures(envConfig);
         if (customTexture && !customTexture.error) {
           await loadTexture(envConfig, customTexture.id);
           if (appService) void queueReplicaBinaryUpload('texture', customTexture, appService);
         }
       }
-      saveCustomTextures(envConfig);
     });
   };
 

@@ -178,6 +178,29 @@ class AnkiUpdateTagsArgs {
 }
 
 @InvokeArg
+class AnkiNoteFillArg {
+    var id: Long = 0
+    var word: String = ""
+    var language: String = ""
+}
+
+@InvokeArg
+class AnkiUpgradeNoteTypeArgs {
+    var notes: Array<AnkiNoteFillArg> = emptyArray()
+}
+
+@InvokeArg
+class AnkiEntryArg {
+    var id: Long = 0
+    var entry: String = ""
+}
+
+@InvokeArg
+class AnkiSetEntriesArgs {
+    var notes: Array<AnkiEntryArg> = emptyArray()
+}
+
+@InvokeArg
 class SetLookupAppArgs {
     var packageName: String? = null
     var className: String? = null
@@ -2228,6 +2251,7 @@ class NativeBridgePlugin(private val activity: Activity): Plugin(activity) {
             AnkiDroidLink.readNotes(cr, args.deckIds.toList()).forEach { n ->
                 notes.put(JSObject().apply {
                     put("id", n.id)
+                    put("mid", n.mid)
                     put("fields", JSArray(n.fields))
                     put("tags", n.tags)
                 })
@@ -2271,6 +2295,36 @@ class NativeBridgePlugin(private val activity: Activity): Plugin(activity) {
         ankiCall(invoke) { cr ->
             val notes = args.notes.map { it.id to it.tags.toList() }
             JSObject().apply { put("updated", AnkiDroidLink.updateTags(cr, notes)) }
+        }
+    }
+
+    /** Whether the Readest note type is behind its current fields or template, plus its id and fields. */
+    @Command
+    fun anki_note_type(invoke: Invoke) = ankiCall(invoke) { cr ->
+        JSObject().apply {
+            put("outdated", AnkiDroidLink.noteTypeOutdated(cr))
+            AnkiDroidLink.findNoteType(cr)?.let { (mid, names) ->
+                put("id", mid)
+                put("fields", JSArray(names))
+            }
+        }
+    }
+
+    @Command
+    fun anki_set_entries(invoke: Invoke) {
+        val args = invoke.parseArgs(AnkiSetEntriesArgs::class.java)
+        ankiCall(invoke) { cr ->
+            val entries = args.notes.map { it.id to it.entry }
+            JSObject().apply { put("updated", AnkiDroidLink.setEntries(cr, entries)) }
+        }
+    }
+
+    @Command
+    fun anki_upgrade_note_type(invoke: Invoke) {
+        val args = invoke.parseArgs(AnkiUpgradeNoteTypeArgs::class.java)
+        ankiCall(invoke) { cr ->
+            val fills = args.notes.map { Triple(it.id, it.word, it.language) }
+            JSObject().apply { put("updated", AnkiDroidLink.upgradeNoteType(cr, fills)) }
         }
     }
 

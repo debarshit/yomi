@@ -313,15 +313,18 @@ const getDialogueHighlightStyles = (viewSettings: ViewSettings, themeCode: Theme
       : viewSettings.dialogueHighlightWeight === 'bold'
         ? '\n    font-weight: bold !important;'
         : '';
+  // Without a background the clone repeats nothing, and iOS 16's WebKit
+  // stops wrapping a line that holds a cloned inline (#7765).
+  const clone = bgBase
+    ? '\n    box-decoration-break: clone;\n    -webkit-box-decoration-break: clone;'
+    : '';
   return `
   /* Dialogue lines tinted with the custom color or, by default, the theme's
      primary color. !important so the tint survives "Override Book Color",
      which repaints spans/paragraphs with the theme background at the same
      importance level but lower specificity. */
   .readest-dialogue {${bgDecl(22)}${text}${weight}
-    border-radius: 0.2em;
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
+    border-radius: 0.2em;${clone}
   }
   .readest-dialogue-block {${bgDecl(12)}${text}${weight}
     border-radius: 0.3em;
@@ -331,9 +334,7 @@ const getDialogueHighlightStyles = (viewSettings: ViewSettings, themeCode: Theme
   /* Italic runs marked like quoted dialogue; nested marks drop their own
      tint so overlapping translucent backgrounds don't stack. */
   :is(i, em) {${bgDecl(22)}${text}${weight}
-    border-radius: 0.2em;
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
+    border-radius: 0.2em;${clone}
   }
   :is(i, em) :is(i, em, .readest-dialogue), .readest-dialogue :is(i, em) {
     background-color: transparent !important;
@@ -606,6 +607,20 @@ const getPageLayoutStyles = (
   body.paginated-mode > .main.vrtl.height-100per {
     height: calc(var(--available-height) * 1px) !important;
   }
+  /* EBPAJ cover pages put a single img.fit inside body.p-cover > .main > p
+     with no block-axis centering, so a width-constrained cover on a portrait
+     screen sticks to the top edge (and under the notch when the header is off).
+     No :only-child on the img: the next-section skip link (a11y.ts) is
+     appended inside that <p>. */
+  body.paginated-mode:is(.p-cover, [epub|type~="cover"]) > .main:has(> p:only-child > img.fit) {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: calc(var(--available-height) * 1px);
+  }
+  body.paginated-mode:is(.p-cover, [epub|type~="cover"]) > .main:has(> p:only-child > img.fit) > p {
+    margin-block: 0 !important;
+  }
   body {
     overflow: unset;
     zoom: ${zoomLevel};
@@ -729,6 +744,34 @@ const getPageLayoutStyles = (
   body.paginated-mode svg {
     max-width: 100%;
     max-height: calc(var(--available-height) * 1px);
+  }
+
+  /* A section holding only an image (a cover, a plate) has it sized to the
+     page. A top margin above it makes its line taller than the page, and the
+     rest goes onto the next page: WebKit cuts the image there, Chromium moves
+     it whole and leaves a blank page (#6676). */
+  body.paginated-mode :has(.lone-image) {
+    margin-block-start: 0 !important;
+  }
+  /* WebKit never moves anything taller than a page: it cuts it where it falls.
+     An image sized to the page sits on the baseline with the line's descent
+     under it, so its line is a few px taller than the page and the image is
+     cut across two pages. Chromium moves it whole. Aligning an image alone on
+     its line to the top drops the descent, so its line fits; an image that
+     shares its line with text keeps the book's alignment.
+     A block that ends exactly on a page boundary also carries the margin after
+     it onto the next page, where Chromium drops it, so a second page-tall image
+     went a page further and left a blank page. Ending the line 1px early lets
+     WebKit drop that margin; :where() lets a book's own margin win.
+     -webkit-line-box-contain is supported only by WebKit (#6676). */
+  @supports (-webkit-line-box-contain: replaced) {
+    body.paginated-mode img.alone-on-line:not(.has-text-siblings),
+    body.paginated-mode .lone-image {
+      vertical-align: top;
+    }
+    :where(body.paginated-mode img.alone-on-line:not(.has-text-siblings)) {
+      margin-block-end: -1px;
+    }
   }
 
   body.scroll-mode img {
@@ -1969,6 +2012,54 @@ const INLINE_IMAGE_CONTAINER_TAGS = new Set([
   'q',
 ]);
 
+// An element whose content flows on its parent's lines (a, span, a div made
+// inline); anything else but an inline-block ends the line. An empty value
+// is the initial `inline`, in environments that report unset props as ''.
+const flowsInLine = (display: string) =>
+  display === 'inline' || display === '' || display === 'contents' || display.startsWith('ruby');
+
+// What comes first on the image's line, reading `node` in one direction:
+// text, a line break (a <br> or a block), or neither
+const scanLine = (node: Node, forward: boolean, win: Window): 'text' | 'break' | null => {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent?.trim() ? 'text' : null;
+  if (node.nodeType !== Node.ELEMENT_NODE) return null;
+  const el = node as Element;
+  const display = win.getComputedStyle(el).display;
+  if (display === 'none') return null;
+  if (el.localName === 'br') return 'break';
+  if (display.startsWith('inline-')) return el.textContent?.trim() ? 'text' : null;
+  if (!flowsInLine(display)) return 'break';
+  const children = Array.from(el.childNodes);
+  for (const child of forward ? children : children.reverse()) {
+    const found = scanLine(child, forward, win);
+    if (found) return found;
+  }
+  return null;
+};
+
+// Whether text shares the image's line: read out from the image and from each
+// inline element around it (links included), up to a <br> or a block. A break
+// ends the line in that direction for every element further out too.
+const hasTextOnLine = (img: Element, win: Window): boolean => {
+  const open = { backward: true, forward: true };
+  for (let node: Element = img; node.parentElement; node = node.parentElement) {
+    for (const forward of [false, true]) {
+      const side = forward ? 'forward' : 'backward';
+      let sib = open[side] ? (forward ? node.nextSibling : node.previousSibling) : null;
+      for (; sib; sib = forward ? sib.nextSibling : sib.previousSibling) {
+        const found = scanLine(sib, forward, win);
+        if (found === 'text') return true;
+        if (found === 'break') {
+          open[side] = false;
+          break;
+        }
+      }
+    }
+    if (!flowsInLine(win.getComputedStyle(node.parentElement).display)) return false;
+  }
+  return false;
+};
+
 const hasInlineTextSibling = (container: Element, targetNode: Node): boolean => {
   const childNodes = Array.from(container.childNodes);
   const idx = childNodes.indexOf(targetNode as ChildNode);
@@ -2074,6 +2165,7 @@ export const applyImageStyle = (document: Document, isDarkMode = false, isFixedL
       keepBaseline,
       noEnlarge,
       leadingImageParagraph,
+      aloneOnLine: !hasTextOnLine(img, win),
     };
   });
 
@@ -2102,8 +2194,10 @@ export const applyImageStyle = (document: Document, isDarkMode = false, isFixedL
     keepBaseline,
     noEnlarge,
     leadingImageParagraph,
+    aloneOnLine,
   } of plans) {
     leadingImageParagraph?.classList.add('leading-image');
+    if (aloneOnLine) img.classList.add('alone-on-line');
     if (!isNaN(percentWidth)) {
       img.style.width = `${(percentWidth / 100) * baseWidth}px`;
       img.removeAttribute('width');
@@ -2130,6 +2224,19 @@ export const applyImageStyle = (document: Document, isDarkMode = false, isFixedL
     }
   });
   classifyAndTagStandaloneDiagrams(document, isDarkMode, isFixedLayout);
+  // A section holding only one image, with no text, is a picture page.
+  // An svg's title and desc are never drawn.
+  const images = document.body?.querySelectorAll('img, svg');
+  if (images?.length === 1) {
+    const texts = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let hasText = false;
+    for (let node = texts.nextNode(); node && !hasText; node = texts.nextNode()) {
+      hasText =
+        !!node.textContent?.trim() &&
+        !node.parentElement?.closest('title, desc, metadata, style, script');
+    }
+    if (!hasText) images[0]!.classList.add('lone-image');
+  }
 };
 
 // The enlarged link hit area positions every link and its ::before box, and

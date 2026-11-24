@@ -42,6 +42,16 @@ export type LibrarySortByType = (typeof LibrarySortByType)[keyof typeof LibraryS
  */
 export type LibrarySecondarySortByType = LibrarySortByType | 'none';
 
+export type LibraryMetadataSortByType = Exclude<
+  LibrarySortByType,
+  typeof LibrarySortByType.Custom | typeof LibrarySortByType.Size
+>;
+
+export interface LibrarySortCriterion {
+  by: LibraryMetadataSortByType;
+  ascending: boolean;
+}
+
 export type LibraryCoverFitType = 'crop' | 'fit';
 
 export const LibraryGroupByType = {
@@ -125,6 +135,12 @@ export interface BookOrbitSettings {
   username: string;
   userkey: string;
   password?: string;
+  /**
+   * BookOrbit 3.8+ API key for the audiobook API. When set, it is sent as the
+   * bearer instead of signing in with `password`; KOReader sync still uses
+   * `username` and `userkey`, which BookOrbit's KOReader routes require.
+   */
+  apiKey?: string;
   deviceId: string;
   deviceName: string;
   strategy: KOSyncStrategy;
@@ -564,6 +580,8 @@ export interface SystemSettings {
   libraryThenSortBy: LibrarySecondarySortByType;
   /** Sort order of the secondary ("Then by") key, independent of `librarySortAscending` (#5119). */
   libraryThenSortAscending: boolean;
+  /** Ordered list of unique metadata sort criteria (highest priority first) with per-criterion direction. */
+  librarySortOrder?: LibrarySortCriterion[];
   libraryGroupBy: LibraryGroupByType;
   libraryCoverFit: LibraryCoverFitType;
   libraryAutoColumns: boolean;
@@ -608,6 +626,7 @@ export interface SystemSettings {
   metadataSeriesCollapsed: boolean;
   metadataOthersCollapsed: boolean;
   metadataDescriptionCollapsed: boolean;
+  metadataStatsCollapsed: boolean;
   lastSyncedAtBooks: number;
   lastSyncedAtConfigs: number;
   lastSyncedAtNotes: number;

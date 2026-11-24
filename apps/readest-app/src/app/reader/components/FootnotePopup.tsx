@@ -29,12 +29,14 @@ import { getPopupBounds, offsetPosition, PopupBounds } from '@/utils/insets';
 import { Insets } from '@/types/misc';
 import { FootnoteHandler } from 'foliate-js/footnotes.js';
 import { mountAdditionalFonts, mountCustomFont } from '@/styles/fonts';
+import { mountWhiteTransparencyFilter } from '@/utils/imageBackground';
 import { eventDispatcher } from '@/utils/event';
 import { getCfiSpinePrefix } from '@/utils/cfi';
 import { isLinkTargetVisible, shouldCheckAsFootnote } from '../utils/footnoteHeuristics';
 import { showTransientHighlight } from '../utils/transientHighlight';
 import { drawAnnotationOverlay } from '../utils/annotatorUtil';
 import { refreshSectionGlosses } from '../utils/wordlensSection';
+import { glossWordRange } from '../utils/wordlensRuby';
 import {
   FootnoteExtractMapping,
   getFootnoteLocalCfi,
@@ -159,13 +161,15 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({
 
   // Point the popup at a new (or no) source document: drop the CFI mapping and
   // the drawn-overlay bookkeeping, and tell the Annotator that any selection
-  // made in the previous popup document is gone.
+  // made in the previous popup document is gone. `closed` says the popup
+  // itself went, which also closes a lookup opened on its text (#7727).
   const resetPopupAnnotationState = (
     map: { index: number; extract: FootnoteExtractMapping | null; doc?: Document } | null = null,
+    closed = false,
   ) => {
     popupMapRef.current = map;
     drawnNotesRef.current.clear();
-    eventDispatcher.dispatch('footnote-selection', { key: bookKey });
+    eventDispatcher.dispatch('footnote-selection', { key: bookKey, closed });
   };
   const historyRef = useRef<{ items: Record<string, unknown>[]; index: number }>({
     items: [],
@@ -207,17 +211,23 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({
   const size18 = useResponsiveSize(18);
   const popupPadding = useResponsiveSize(10);
 
-  // The window less the cell's safe-area insets, so the popup stays clear of
-  // the Dynamic Island, a camera cutout and the home indicator (#7389).
+  // The cell less its safe-area insets, so the popup stays clear of the
+  // Dynamic Island, a camera cutout and the home indicator (#7389). In cell
+  // coordinates, like the triangle point: measured from the window, a pinned
+  // sidebar or the book beside this one counted as room, and the popup slid
+  // back over its noteref to fit the cell (#7637).
   const getSafeArea = () => {
     const { top, right, bottom, left } = gridInsetsRef.current;
+    const cell = document.querySelector(`#gridcell-${bookKey}`)?.getBoundingClientRect();
+    const cellWidth = cell?.width ?? window.innerWidth;
+    const cellHeight = cell?.height ?? window.innerHeight;
     return {
       top,
       left,
-      right: window.innerWidth - right,
-      bottom: window.innerHeight - bottom,
-      width: window.innerWidth - left - right,
-      height: window.innerHeight - top - bottom,
+      right: cellWidth - right,
+      bottom: cellHeight - bottom,
+      width: cellWidth - left - right,
+      height: cellHeight - top - bottom,
     };
   };
 
@@ -353,6 +363,12 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({
       appLang: getLocale(),
       allowDownload: false,
       vocabulary: useVocabularyStore.getState().getLearningAndMastered(vocabularyLang(bookLang)),
+      // Hints drawn or removed move the text under the highlights mirrored
+      // here. Forget what was drawn so the next pass draws every one again.
+      onGlossesChanged: () => {
+        drawnNotesRef.current.clear();
+        setPopupContentEpoch((epoch) => epoch + 1);
+      },
     });
   };
 
@@ -400,7 +416,7 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({
         setCanGoBack(true);
         footnoteHandler.handle(bookDoc, e)?.catch((err) => {
           console.warn(err);
-          getView(bookKey)?.goTo(popupLinkDetail.href);
+          getView(bookKey)?.goTo(popupLinkDetail.href, { focus: true });
           flashLinkTarget(popupLinkDetail.href);
           setShowPopup(false);
         });
@@ -415,6 +431,7 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({
         const { doc, index } = e.detail as { doc: Document; index: number };
         const bookData = getBookData(bookKey)!;
         keepTextAlignment(doc);
+        mountWhiteTransparencyFilter(doc);
         mountAdditionalFonts(doc, isCJKLang(bookData.book?.primaryLanguage));
         getLoadedFonts().forEach((font) => {
           mountCustomFont(doc, font);
@@ -476,6 +493,26 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({
           pointerDown = false;
           if (selectionTimer) clearTimeout(selectionTimer);
           report(true);
+        });
+        // Word Lens: a tap on a hinted word looks it up, as it does in the
+        // book (#7691). A hint inside a link stays a link, and the reported
+        // range isn't selected here, so no later caret clears it.
+        doc.addEventListener('click', (ev: MouseEvent) => {
+          const ruby = (ev.target as Element | null)?.closest?.('ruby.wl-gloss');
+          if (!ruby || ruby.closest('a') || doc.getSelection()?.isCollapsed === false) return;
+          const range = glossWordRange(ruby);
+          if (!range) return;
+          selectionReported = false;
+          const getPopupCfi = getPopupCfiMapper(index);
+          eventDispatcher.dispatch('footnote-selection', {
+            key: bookKey,
+            range,
+            index,
+            cfi: getPopupCfi?.(range),
+            href: footnoteHrefRef.current?.split('#')[0],
+            getPopupCfi,
+            wordLens: true,
+          });
         });
         if (appService?.isMobile) {
           // Same as the main view: the selection handles suffice on mobile.
@@ -711,7 +748,7 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({
           setShowPopup(false);
         }
         const detail = (event as CustomEvent).detail;
-        view?.goTo(detail.href);
+        view?.goTo(detail.href, { focus: true });
         flashLinkTarget(detail.href);
       });
     } else if (!event.defaultPrevented) {
@@ -742,7 +779,7 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({
     const href = sourceHref;
     handleDismissPopup();
     if (!href) return;
-    view?.goTo(href);
+    view?.goTo(href, { focus: true });
     flashLinkTarget(href);
   };
 
@@ -755,7 +792,7 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({
   const handleDismissPopup = () => {
     closePopup();
     stopTrackingPopupContentSize();
-    resetPopupAnnotationState();
+    resetPopupAnnotationState(null, true);
     historyRef.current = { items: [], index: -1 };
     sizeAdjustCountRef.current = 0;
     trianglePositionRef.current = null;
@@ -1024,8 +1061,15 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({
           relative, and the cell is its `relative` ancestor, so insetting the
           wrapper to the cell makes the stacking context without moving
           anything. `pointer-events-none` keeps the cell-covering wrapper from
-          swallowing the outside taps the Overlay above dismisses on. */}
-      <div className='pointer-events-none absolute inset-0 z-[42]'>
+          swallowing the outside taps the Overlay above dismisses on.
+
+          While closed the band is `invisible`: the note still loads and
+          measures off-screen, but a painted cell-wide band kept Chromium from
+          seeing the pointer over scrolled mode's overlay scrollbar, which
+          faded mid-drag and lost the drag (#7796). */}
+      <div
+        className={clsx('pointer-events-none absolute inset-0 z-[42]', !showPopup && 'invisible')}
+      >
         <Popup
           isOpen={showPopup}
           width={responsiveWidth}

@@ -53,10 +53,10 @@ const PAGE_FOLLOW_INTERVAL_MS = 200;
 // stall rather than after it, slow enough to cost nothing over a long session.
 const TTS_BUFFERING_POLL_MS = 400;
 
-// Following the voice turns the page and focuses the spoken text inside the
-// book's iframe, which takes the caret (and an IME composition) out of a note
-// being typed and closes its popup (#6837). The view holds still while a note
-// editor has focus; the next mark catches up once it loses focus.
+// Following the voice turns the page, and a page turn closes the note popup
+// (#6837). The view holds still while a marked note editor has focus; the next
+// mark catches up once it loses focus. The Notebook is left unmarked: it stays
+// open beside the page, so the page keeps up with the voice (#7663).
 const isTypingNote = () => !!document.activeElement?.hasAttribute('data-note-editor');
 
 // Text the book hides is still read aloud: a display:none long description
@@ -92,6 +92,9 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
   // sentence boundary it has no event of its own — and cheap enough to poll,
   // being two property reads whose result usually does not change.
   const [buffering, setBuffering] = useState(false);
+  // The voice the engine reads with. It resolves on the first utterance and
+  // nothing announces it, so the buffering probe reads it too (#7787).
+  const [voiceId, setVoiceId] = useState('');
   const [showBackToCurrentTTSLocation, setShowBackToCurrentTTSLocation] = useState(false);
 
   const [timeoutOption, setTimeoutOption] = useState(0);
@@ -997,6 +1000,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
         setTtsClientsInitialized(false);
         setAudioTransport(false);
         setSupportsLyrics(false);
+        setVoiceId('');
 
         // Show the mini player immediately, in the "playing" state: client
         // init below can take a while and the session is conceptually already
@@ -1194,6 +1198,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
   useEffect(() => {
     if (!showIndicator) {
       setBuffering(false);
+      setVoiceId('');
       return;
     }
     const poll = () => {
@@ -1202,6 +1207,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
       // session hands back something that is not a full controller.
       const next = ttsControllerRef.current?.isBuffering?.() ?? false;
       setBuffering((prev) => (prev === next ? prev : next));
+      setVoiceId(ttsControllerRef.current?.getVoiceId?.() ?? '');
     };
     poll();
     const interval = setInterval(poll, TTS_BUFFERING_POLL_MS);
@@ -1358,6 +1364,12 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
       const ttsController = ttsControllerRef.current;
       if (ttsController) {
         if (ttsController.state === 'playing' || resume) {
+          // In the browser on iOS the silent element is released while Web
+          // Speech reads, and the start() below, after these awaits, may be
+          // too late for the browser to let a new one play. Play it now, still
+          // inside the tap when the throttle runs this at once. start()
+          // releases it again if the new voice is Web Speech.
+          ttsController.unblockSilentAudio();
           await ttsController.stop();
           await ttsController.setVoice(voice, lang);
           await ttsController.start();
@@ -1452,6 +1464,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
     audioTransport,
     supportsLyrics,
     buffering,
+    voiceId,
     refreshTtsLang,
     getController,
   };

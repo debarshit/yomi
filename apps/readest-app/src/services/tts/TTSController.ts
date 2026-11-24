@@ -27,13 +27,15 @@ import { CachingProvider } from './providers/cache';
 import { ReadestVoiceProvider } from './providers/readest';
 import { OpenAICompatibleSpeechProvider } from './providers/openaiCompatible';
 import type { CustomTTSService } from '@/types/customTTS';
-import { getAccessToken, isCustomTTSAllowed } from '@/utils/access';
+import { getSignedInToken, isCustomTTSAllowed } from '@/utils/access';
 import { SectionTimeline, TimelineSentence } from './SectionTimeline';
 import { estimateSentenceSeconds, hydrateProvisionalDurations } from './ttsDuration';
 import { DownloadableSentence, SectionEnumerator, TTSDownloader } from './TTSDownloader';
 import { TTSUtils } from './TTSUtils';
 import { TTSClient } from './TTSClient';
 import { startAudioKeepAlive, stopAudioKeepAlive } from './WebAudioPlayer';
+import { releaseUnblockAudio, unblockAudio } from './ttsMediaBridge';
+import { getOSPlatform } from '@/utils/misc';
 import { isSameLang, isValidLang } from '@/utils/lang';
 import { normalizeLyricText } from '@/utils/ttsLyrics';
 import {
@@ -91,6 +93,9 @@ const PRELOAD_AHEAD_SEC = 180;
 const PRELOAD_MAX_PARAGRAPHS = 40;
 // Preload the next paragraphs this long after a paragraph starts at the latest.
 const PRELOAD_NEXT_AFTER_MS = 500;
+// How long a paused session keeps the audio keep-alive, as long as Media3
+// keeps a paused player in the foreground.
+const PAUSED_KEEP_ALIVE_MS = 10 * 60 * 1000;
 
 const isSameRange = (a: Range, b: Range) =>
   a.startContainer.ownerDocument === b.startContainer.ownerDocument &&
@@ -266,6 +271,7 @@ export class TTSController extends EventTarget {
 
   #state: TTSState = 'stopped';
   #terminated = false;
+  #pausedKeepAliveTimer: ReturnType<typeof setTimeout> | undefined;
   // View attachment: false while the session runs headless (book closed).
   // The epoch invalidates in-flight attachView calls when a detach (or a
   // newer attach) supersedes them.
@@ -334,7 +340,7 @@ export class TTSController extends EventTarget {
     );
     const customProvider = new OpenAICompatibleSpeechProvider(
       () => this.#customTTSServices(),
-      async () => isCustomTTSAllowed(await getAccessToken()),
+      async () => isCustomTTSAllowed(getSignedInToken()),
     );
     this.ttsCustomClient = new BufferedTTSClient(
       cacheStore ? new CachingProvider(customProvider, cacheStore) : customProvider,
@@ -393,6 +399,35 @@ export class TTSController extends EventTarget {
     });
   }
 
+  // In the browser on iOS, Web Speech is silent while the looping element from
+  // unblockAudio() plays, so the element goes while a direct-speak engine (the
+  // OS renders its audio; Web Speech there) reads and comes back for the other
+  // engines, which need it to play with the mute switch on.
+  // Synced when reading starts, not where the engine is chosen: setLang() can
+  // still switch engines after init(), and a start stopped before it speaks
+  // must not bring the element back.
+  #syncSilentAudio() {
+    if (this.#releasesSilentAudio()) {
+      if (this.ttsClient.getCapabilities().mediaClock === false) releaseUnblockAudio();
+      else unblockAudio();
+    }
+  }
+
+  // For the tap that changes the voice, before it awaits anything: start()
+  // runs after those awaits, where the browser may refuse to play an element
+  // it creates. Only needed where #syncSilentAudio() releases the element.
+  unblockSilentAudio() {
+    if (this.#releasesSilentAudio()) unblockAudio();
+  }
+
+  // iPadOS Safari sends a desktop ("Macintosh") user agent; touch points give
+  // it away.
+  #releasesSilentAudio() {
+    const os = getOSPlatform();
+    const iOS = os === 'ios' || (os === 'macos' && navigator.maxTouchPoints > 1);
+    return iOS && !this.appService?.isIOSApp;
+  }
+
   // Keep the hidden WebView schedulable, in the two cases where it would
   // otherwise fall silent and get frozen by Chromium. Android-only (iOS drives
   // playout through its own native audio session).
@@ -407,15 +442,27 @@ export class TTSController extends EventTarget {
   //     freeze and Play from a Bluetooth headset only flips the notification —
   //     the native foreground service answers, the reader never wakes to speak,
   //     and the in-app player drifts out of sync until the app is foregrounded.
-  //     See #5561.
+  //     See #5561. Only for PAUSED_KEEP_ALIVE_MS, though: the tone keeps the
+  //     audio output open, so a session left paused stopped the device from
+  //     sleeping (#7546). The looping silent element from unblockAudio() goes
+  //     too: it holds an output of its own, and Android needs it for neither
+  //     media keys (the native session has them) nor autoplay (wry turns the
+  //     gesture requirement off). Play from the app still resumes after that.
   #syncAudioKeepAlive() {
+    clearTimeout(this.#pausedKeepAliveTimer);
     const directSpeak = this.ttsClient.getCapabilities().mediaClock === false;
-    const needsKeepAlive =
-      !!this.appService?.isAndroidApp && (directSpeak || this.state.includes('paused'));
-    if (needsKeepAlive) {
-      startAudioKeepAlive();
-    } else {
+    const paused = this.state.includes('paused');
+    if (!this.appService?.isAndroidApp || !(directSpeak || paused)) {
       stopAudioKeepAlive();
+      return;
+    }
+    startAudioKeepAlive();
+    if (paused) {
+      this.#pausedKeepAliveTimer = setTimeout(() => {
+        if (!this.state.includes('paused')) return;
+        stopAudioKeepAlive();
+        releaseUnblockAudio();
+      }, PAUSED_KEEP_ALIVE_MS);
     }
   }
 
@@ -2046,6 +2093,7 @@ export class TTSController extends EventTarget {
     if (pause) {
       await this.stop();
       this.state = 'forward-paused';
+      this.#syncAudioKeepAlive();
     } else {
       await this.#delayParagraphGap(signal);
       if (signal.aborted) return;
@@ -2201,6 +2249,7 @@ export class TTSController extends EventTarget {
   }
 
   async speak(ssml: string | Promise<string>, oneTime = false, oneTimeCallback?: () => void) {
+    this.#syncSilentAudio();
     await this.initViewTTS();
     this.#speak(ssml, oneTime)
       .then(() => {
@@ -2221,6 +2270,7 @@ export class TTSController extends EventTarget {
   }
 
   async start() {
+    this.#syncSilentAudio();
     await this.initViewTTS();
     // Always resume from the current list position instead of calling tts.start().
     // tts.start() resets the TTS list to position 0 (section beginning), which is
@@ -2257,6 +2307,7 @@ export class TTSController extends EventTarget {
 
   async resume() {
     this.state = 'playing';
+    this.#syncAudioKeepAlive();
     await this.ttsClient.resume().catch((e) => this.error(e));
   }
 
@@ -2501,6 +2552,11 @@ export class TTSController extends EventTarget {
     // Remembered for the book's language too, so it reads that language next time.
     TTSUtils.setPreferredClient(this.ttsClient.name, this.ttsLang);
     TTSUtils.setPreferredVoice(this.ttsClient.name, lang, voiceId);
+    // A multilingual voice reads any language, but a voice picked earlier for
+    // the book's language comes first: replace that one too (#7430).
+    if (lang === MULTILINGUAL_LANG) {
+      TTSUtils.setPreferredVoice(this.ttsClient.name, this.ttsLang, voiceId);
+    }
     await this.ttsClient.setVoice(voiceId);
     // A different voice speaks at a different pace: re-estimate the timeline
     // under the new voice (measured durations are keyed per voice already).

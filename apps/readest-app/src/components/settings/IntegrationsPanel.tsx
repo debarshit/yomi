@@ -27,7 +27,6 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { useEnv } from '@/context/EnvContext';
 import { useAuth } from '@/context/AuthContext';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useKeyDownActions } from '@/hooks/useKeyDownActions';
 import { useQuotaStats } from '@/hooks/useQuotaStats';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useCustomOPDSStore } from '@/store/customOPDSStore';
@@ -163,6 +162,13 @@ const IntegrationsPanel: React.FC = () => {
     !user || (userProfilePlan !== undefined && !isCloudSyncPremium) ? _('Plus') : undefined;
 
   const [subPage, setSubPage] = useState<SubPage>(null);
+  // Signed out goes straight to sign-in: /user would show "Loading profile..."
+  // before bouncing to /auth (#7755).
+  const openPremiumProvider = (page: SubPage) => {
+    if (isCloudSyncPremium) setSubPage(page);
+    else if (user) navigateToProfile(router);
+    else navigateToLogin(router);
+  };
   const flowConnectors = useFlowConnectors();
   const flowState = useFlowState();
 
@@ -173,6 +179,12 @@ const IntegrationsPanel: React.FC = () => {
   // handles backfilling contentId for legacy entries.
   useEffect(() => {
     void useCustomOPDSStore.getState().loadCustomOPDSCatalogs(envConfig);
+  }, [envConfig]);
+
+  // Same hydration as above, for the Audiobookshelf server list — keeps the
+  // Content Sources row's server count accurate on first open.
+  useEffect(() => {
+    void useABSServerStore.getState().loadABSServers(envConfig);
   }, [envConfig]);
 
   // Android Back / Esc: when any integrations sub-page (KOSync, WebDAV,
@@ -741,9 +753,7 @@ const IntegrationsPanel: React.FC = () => {
                   isEnabled: !!settings.googleDrive?.enabled,
                 })}
                 onToggle={(next) => toggleCloudProvider('gdrive', next)}
-                onOpen={() =>
-                  isCloudSyncPremium ? setSubPage('gdrive') : navigateToProfile(router)
-                }
+                onOpen={() => openPremiumProvider('gdrive')}
                 toggleLabel={_('Sync with Google Drive')}
               />
             )}
@@ -759,7 +769,7 @@ const IntegrationsPanel: React.FC = () => {
                 isEnabled: !!settings.webdav?.enabled,
               })}
               onToggle={(next) => toggleCloudProvider('webdav', next)}
-              onOpen={() => (isCloudSyncPremium ? setSubPage('webdav') : navigateToProfile(router))}
+              onOpen={() => openPremiumProvider('webdav')}
               toggleLabel={_('Sync with WebDAV')}
             />
             <CloudProviderRow
@@ -774,7 +784,7 @@ const IntegrationsPanel: React.FC = () => {
                 isEnabled: !!settings.s3?.enabled,
               })}
               onToggle={(next) => toggleCloudProvider('s3', next)}
-              onOpen={() => (isCloudSyncPremium ? setSubPage('s3') : navigateToProfile(router))}
+              onOpen={() => openPremiumProvider('s3')}
               toggleLabel={_('Sync with S3')}
             />
             {(appService?.isDesktopApp ||
@@ -794,10 +804,25 @@ const IntegrationsPanel: React.FC = () => {
                   isEnabled: !!settings.onedrive?.enabled,
                 })}
                 onToggle={(next) => toggleCloudProvider('onedrive', next)}
-                onOpen={() =>
-                  isCloudSyncPremium ? setSubPage('onedrive') : navigateToProfile(router)
-                }
+                onOpen={() => openPremiumProvider('onedrive')}
                 toggleLabel={_('Sync with OneDrive')}
+              />
+            )}
+            {(appService?.isIOSApp || appService?.isMacOSApp) && (
+              <CloudProviderRow
+                icon={RiAppleLine}
+                title={_('iCloud')}
+                status={icloudStatus}
+                badge={premiumBadge}
+                checked={!!settings.icloud?.enabled}
+                canToggle={canToggleCloudProvider({
+                  isPremium: isCloudSyncPremium,
+                  isConfigured: icloudAvailable,
+                  isEnabled: !!settings.icloud?.enabled,
+                })}
+                onToggle={(next) => toggleCloudProvider('icloud', next)}
+                onOpen={() => openPremiumProvider('icloud')}
+                toggleLabel={_('Sync with iCloud')}
               />
             )}
           </div>

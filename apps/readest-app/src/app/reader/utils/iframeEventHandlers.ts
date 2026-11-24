@@ -3,6 +3,7 @@ import { eventDispatcher } from '@/utils/event';
 import type { ImageViewerGesture, ViewSettings } from '@/types/book';
 import { findGlossWord } from '@/app/reader/utils/wordlensRuby';
 import { TURN_GESTURE_LEFT_INSET_ATTRIBUTE } from './brightnessGesture';
+import { hasReaderModal } from './readerOverlay';
 import { hasScrollRoomY } from './wheelGesture';
 import { toParentViewportPoint } from './annotatorUtil';
 import { isTextAtPoint } from './crossDocSelection';
@@ -301,6 +302,10 @@ const getKeyStatus = (event?: MouseEvent | WheelEvent | TouchEvent) => {
 };
 
 export const handleKeydown = (bookKey: string, event: KeyboardEvent) => {
+  // A modal dialog owns the keys, even when focus slipped into the book: they
+  // must not turn the page behind it (#7732). A popup over the book (the
+  // instant dictionary) is not modal: Escape typed in the book closes it.
+  if (hasReaderModal()) return;
   const target = event.target as HTMLElement | null;
   const interactiveTarget =
     !!target?.isContentEditable ||
@@ -628,6 +633,19 @@ export const handleClick = (
 ) => {
   const now = Date.now();
   if (consumeSuppressedDomClick(bookKey, event, now)) return;
+  // A tap the book's own script handled (it cancelled the click; Foliate
+  // cancels only link clicks), or one on a form control or its label in the
+  // book, belongs to the book, e.g. a Go diagram's replay controls (#7769).
+  // It still counts as a click, so a page turn pending from the tap before it
+  // is cancelled.
+  const tapped = event.target as Element | null;
+  if (
+    (event.defaultPrevented && !tapped?.closest('a[href]')) ||
+    tapped?.closest('button, input, select, textarea, label')
+  ) {
+    lastClickTime = now;
+    return;
+  }
   const dismissedSelection =
     !!event.currentTarget &&
     event.button === 0 &&

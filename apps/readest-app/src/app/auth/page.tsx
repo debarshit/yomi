@@ -53,6 +53,10 @@ export default function AuthPage() {
   const [isMounted, setIsMounted] = useState(false);
   const isOAuthServerRunning = useRef(false);
   const useCustomeOAuth = useRef(false);
+  // Go Back waits for a save: a second press meanwhile must not go back
+  // twice, and a sign-in that has already left takes precedence.
+  const isLeaving = useRef(false);
+  const signedInAndLeft = useRef(false);
 
   const headerRef = useRef<HTMLDivElement>(null);
 
@@ -230,11 +234,27 @@ export default function AuthPage() {
     }
   };
 
-  const handleGoBack = () => {
-    // Keep login false to avoid infinite loop to redirect to the login page
-    settings.keepLogin = false;
-    setSettings(settings);
-    saveSettings(envConfig, settings);
+  const handleGoBack = async () => {
+    if (isLeaving.current) return;
+    isLeaving.current = true;
+    // Keep login false to avoid infinite loop to redirect to the login page.
+    // Leave only once it is saved: the library reads settings from disk when it
+    // mounts, and an unfinished write opened this page once more (#7726).
+    // On a cold load the store is still an empty object, so read through to
+    // disk first: persisting that would overwrite the real settings file with
+    // a lone `keepLogin`. Building a new object rather than mutating in place
+    // also keeps the settingsStore subscriber's identity check meaningful.
+    try {
+      const appService = await envConfig.getAppService();
+      const current = settingsLoaded ? settings : await appService.loadSettings();
+      const next = { ...current, keepLogin: false };
+      setSettings(next);
+      await saveSettings(envConfig, next);
+    } catch (error) {
+      console.error('Failed to clear keepLogin:', error);
+    }
+    isLeaving.current = false;
+    if (signedInAndLeft.current) return;
     const redirectTo = new URLSearchParams(window.location.search).get('redirect');
     // Go back to the reader rather than pushing the redirect over /auth: a
     // pushed entry leaves /auth in the history, and the reader's Android back
@@ -276,6 +296,7 @@ export default function AuthPage() {
         const now = Date.now();
         localStorage.setItem(lastRedirectAtKey, now.toString());
         if (now - lastRedirectAt > 3000) {
+          signedInAndLeft.current = true;
           // Same as handleGoBack: never leave /auth on the history stack.
           if (redirectTo && isReaderBeneath()) {
             router.back();
@@ -328,7 +349,7 @@ export default function AuthPage() {
         <div
           ref={headerRef}
           className={clsx(
-            'fixed z-10 flex w-full items-center justify-between py-2 pe-6 ps-4',
+            'fixed z-30 flex w-full items-center justify-between py-2 pe-6 ps-4',
             appService?.hasTrafficLight && 'pt-11',
           )}
           style={{

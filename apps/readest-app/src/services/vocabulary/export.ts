@@ -1,9 +1,10 @@
+import { toDateKey } from '@/services/statistics/readingStats';
 import type { VocabularyEntry } from './types';
 
 // Vocabulary export (#789): an Anki text-import file (the header lines make it
 // import without field mapping) and a CSV for spreadsheets / other apps.
 
-const escapeHtml = (s: string) =>
+export const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const oneLine = (s: string) => s.replace(/[\t\r\n]+/g, ' ');
@@ -27,7 +28,9 @@ const latest = (e: VocabularyEntry) => e.occurrences[0];
 const bookTag = (title?: string) => (title ? title.trim().replace(/\s+/g, '_') : '');
 
 /** The card a word becomes in Anki, for the file export and the AnkiDroid link. */
-export const ankiCardOf = (e: VocabularyEntry): { front: string; back: string; tags: string[] } => {
+export const ankiCardOf = (
+  e: VocabularyEntry,
+): { word: string; front: string; back: string; tags: string[] } => {
   const occ = latest(e);
   const word = escapeHtml(oneLine(e.word));
   const sentence = occ ? boldWord(escapeHtml(oneLine(occ.sentence)), oneLine(e.word)) : '';
@@ -40,7 +43,7 @@ export const ankiCardOf = (e: VocabularyEntry): { front: string; back: string; t
     .filter(Boolean)
     .join('<br>');
   const tags = ['readest', bookTag(occ?.bookTitle)].filter(Boolean);
-  return { front, back, tags };
+  return { word, front, back, tags };
 };
 
 export const toAnkiText = (entries: VocabularyEntry[]): string => {
@@ -65,7 +68,8 @@ const csvField = (v: string | number) => {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+// The local day: in UTC an early-morning lookup was dated the day before.
+const day = (ms: number) => toDateKey(new Date(ms));
 
 export const toCsv = (entries: VocabularyEntry[]): string => {
   const rows = [
@@ -80,6 +84,7 @@ export const toCsv = (entries: VocabularyEntry[]): string => {
       'first looked up',
       'last looked up',
       'lookup count',
+      'language',
     ],
   ];
   for (const e of entries) {
@@ -96,6 +101,7 @@ export const toCsv = (entries: VocabularyEntry[]): string => {
       day(times.length ? Math.min(...times) : e.createdAt),
       day(times.length ? Math.max(...times) : e.createdAt),
       String(e.occurrences.length),
+      e.lang,
     ]);
   }
   return `﻿${rows.map((r) => r.map(csvField).join(',')).join('\r\n')}\r\n`;

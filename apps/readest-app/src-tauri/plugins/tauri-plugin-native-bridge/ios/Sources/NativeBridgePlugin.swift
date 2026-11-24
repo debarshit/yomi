@@ -1155,7 +1155,14 @@ class NativeBridgePlugin: Plugin {
       // prefersStatusBarHidden and setPrefersStatusBarHidden:, which calls
       // setNeedsStatusBarAppearanceUpdate. Needs
       // UIViewControllerBasedStatusBarAppearance = YES in Info.plist.
-      let applied = self.setPrefersStatusBarHidden(!visible, on: keyWindow.rootViewController)
+      let rootViewController = keyWindow.rootViewController
+      let applied = self.setPreference(
+        "setPrefersStatusBarHidden:", to: !visible, on: rootViewController)
+      // The home indicator hides with the status bar, never on its own: iOS
+      // empties the Dynamic Island while an app hides either one, so other
+      // apps' Live Activities show wherever the status bar does (#7471).
+      _ = self.setPreference(
+        "setPrefersHomeIndicatorAutoHidden:", to: !visible, on: rootViewController)
       keyWindow.layoutIfNeeded()
       // The safe area follows the status bar a moment later (iPhone Duo's side
       // strip is an 84pt inset on the inner display). Resolve once it has, so
@@ -1185,17 +1192,21 @@ class NativeBridgePlugin: Plugin {
     return windows.first(where: { $0.isKeyWindow }) ?? windows.first
   }
 
-  /// Returns false when the view controller does not respond to tao's
-  /// `setPrefersStatusBarHidden:`, so the caller can report the failure.
-  private func setPrefersStatusBarHidden(_ hidden: Bool, on viewController: UIViewController?) -> Bool {
-    let selector = NSSelectorFromString("setPrefersStatusBarHidden:")
+  /// Calls one of tao's TaoUIViewController setters, such as
+  /// `setPrefersStatusBarHidden:`, which also asks UIKit to re-read the
+  /// preference. Returns false when the view controller does not respond to
+  /// it, so the caller can report the failure.
+  private func setPreference(
+    _ setterName: String, to value: Bool, on viewController: UIViewController?
+  ) -> Bool {
+    let selector = NSSelectorFromString(setterName)
     guard let viewController = viewController, viewController.responds(to: selector) else {
-      logger.error("Root view controller cannot hide the status bar: \(String(describing: viewController))")
+      logger.error("Root view controller has no \(setterName): \(String(describing: viewController))")
       return false
     }
     typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
     let setter = unsafeBitCast(viewController.method(for: selector), to: Setter.self)
-    setter(viewController, selector, hidden)
+    setter(viewController, selector, value)
     return true
   }
 
@@ -2169,6 +2180,25 @@ class NativeBridgePlugin: Plugin {
       }
       invoke.resolve(["status": "timeout"])
     }
+  }
+
+  @objc public func on_device_llm_status(_ invoke: Invoke) {
+    invoke.resolve(OnDeviceLLM.status())
+  }
+
+  @objc public func on_device_llm_generate(_ invoke: Invoke) {
+    guard let args = try? invoke.parseArgs(OnDeviceLLMGenerateArgs.self) else {
+      return invoke.reject("Failed to parse arguments")
+    }
+    OnDeviceLLM.generate(args, invoke: invoke)
+  }
+
+  @objc public func on_device_llm_cancel(_ invoke: Invoke) {
+    guard let args = try? invoke.parseArgs(OnDeviceLLMCancelArgs.self) else {
+      return invoke.reject("Failed to parse arguments")
+    }
+    OnDeviceLLM.cancel(args.requestId)
+    invoke.resolve()
   }
 
   /// Hold a strong reference to the active folder picker delegate so

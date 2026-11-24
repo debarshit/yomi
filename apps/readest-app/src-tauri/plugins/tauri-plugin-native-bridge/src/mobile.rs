@@ -368,6 +368,30 @@ impl<R: Runtime> NativeBridge<R> {
             .map_err(Into::into)
     }
 
+    pub fn anki_note_type(&self) -> crate::Result<AnkiNoteTypeResponse> {
+        self.0
+            .run_mobile_plugin("anki_note_type", ())
+            .map_err(Into::into)
+    }
+
+    pub fn anki_upgrade_note_type(
+        &self,
+        payload: AnkiUpgradeNoteTypeRequest,
+    ) -> crate::Result<AnkiUpdateTagsResponse> {
+        self.0
+            .run_mobile_plugin("anki_upgrade_note_type", payload)
+            .map_err(Into::into)
+    }
+
+    pub fn anki_set_entries(
+        &self,
+        payload: AnkiSetEntriesRequest,
+    ) -> crate::Result<AnkiUpdateTagsResponse> {
+        self.0
+            .run_mobile_plugin("anki_set_entries", payload)
+            .map_err(Into::into)
+    }
+
     pub fn set_lookup_app(&self, payload: SetLookupAppRequest) -> crate::Result<()> {
         self.0
             .run_mobile_plugin("set_lookup_app", payload)
@@ -687,6 +711,27 @@ impl<R: Runtime> NativeBridge<R> {
     ) -> crate::Result<ICloudEnsureDownloadedResponse> {
         self.0
             .run_mobile_plugin("icloud_ensure_downloaded", payload)
+            .map_err(Into::into)
+    }
+
+    pub fn on_device_llm_status(&self) -> crate::Result<OnDeviceLlmStatusResponse> {
+        self.0
+            .run_mobile_plugin("on_device_llm_status", ())
+            .map_err(Into::into)
+    }
+
+    pub fn on_device_llm_generate(
+        &self,
+        payload: OnDeviceLlmGenerateRequest,
+    ) -> crate::Result<OnDeviceLlmGenerateResponse> {
+        self.0
+            .run_mobile_plugin("on_device_llm_generate", payload)
+            .map_err(Into::into)
+    }
+
+    pub fn on_device_llm_cancel(&self, payload: OnDeviceLlmCancelRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin("on_device_llm_cancel", payload)
             .map_err(Into::into)
     }
 }

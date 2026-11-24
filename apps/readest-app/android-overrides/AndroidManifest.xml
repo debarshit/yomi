@@ -27,9 +27,23 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.yomi"
         android:hardwareAccelerated="true"
+        android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
 
-        <!-- Android Auto opt-in. -->
+        <!-- requestLegacyExternalStorage: Android 10 has no All Files Access,
+             so without it scoped storage hides shared-storage files from the
+             path reads that folder import and read-in-place use (#7542).
+             Android 11+ ignores it for apps targeting API 30+. -->
+
+        <!-- Android Auto opt-in. Play's Auto review rejected version code
+             11020 ("Audio inconsistently plays on the Android Auto
+             environment"), which blocked the whole release; it was withdrawn
+             in #5038, restored in #5066, and withdrawn again in #5235. It now
+             ships to the FOSS/GitHub builds only: build.gradle.kts resolves
+             `carAppMetaName` to an inert name for storeFlavor=googleplay, so
+             the Play build advertises no car application and skips Auto
+             review. Flip that mapping once the car audio path is validated
+             on real hardware. -->
         <meta-data
             android:name="${carAppMetaName}"
             android:resource="@xml/automotive_app_desc" />

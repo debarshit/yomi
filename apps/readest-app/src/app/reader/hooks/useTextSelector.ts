@@ -586,6 +586,12 @@ export const useTextSelector = (
     const text = await getAnnotationText(range);
     if (publication !== selectionPublicationId.current) return;
     const progress = getProgress(bookKey);
+    // A touch selection on Windows and Linux takes the app's own handles. The
+    // webview draws touch handles only for a selection the user made, so they
+    // go when the release re-adds the range (`rebuildRange`), and nothing was
+    // left to extend the word a long press selects (#7820).
+    const desktopTouch =
+      lastPointerType.current === 'touch' && (osPlatform === 'windows' || osPlatform === 'linux');
     setSelection({
       key: bookKey,
       text,
@@ -593,13 +599,20 @@ export const useTextSelector = (
       page: bookData?.isFixedLayout ? index + 1 : progress?.page || 0,
       range,
       index,
-      handlesSuppressed,
+      handlesSuppressed: handlesSuppressed || desktopTouch,
       ...(navigated && { quickActionHandled: true }),
     });
   };
 
   const handleRendererRelocate = (event: Event) => {
-    if ((event as CustomEvent).detail?.reason === 'selection') navigatedSelectionRef.current = true;
+    const reason = (event as CustomEvent).detail?.reason;
+    if (reason === 'selection') navigatedSelectionRef.current = true;
+    // The paginator re-anchored after a re-layout, such as the Notebook pinning
+    // beside the page: keep the Android selection pin (handleScroll) on the
+    // page it chose, not on an offset from the old layout (#7789).
+    if (reason === 'anchor' && selectionPosition.current !== null) {
+      selectionPosition.current = getView(bookKey)?.renderer?.containerPosition ?? null;
+    }
   };
 
   const startInstantAnnotating = (

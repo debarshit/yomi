@@ -105,6 +105,15 @@ const ProfilePage = () => {
       .catch((e) => console.warn('[user] Silent session sync failed:', e));
   }, [mounted, token, login]);
 
+  const {
+    signingOut,
+    handleLogout,
+    handleResetPassword,
+    handleUpdateEmail,
+    handleConfirmDelete,
+    handleDeleteAllBooks,
+  } = useUserActions();
+
   useEffect(() => {
     if (!mounted) return;
 
@@ -135,6 +144,9 @@ const ProfilePage = () => {
       return;
     }
 
+    // Signing out opens the library, not the login page (#7726).
+    if (signingOut) return;
+
     const timer = setTimeout(() => {
       const redirect = searchParams?.get('redirect') || '/library';
       // Replace, so leaving the login page goes back to the opener (#7567).
@@ -142,18 +154,11 @@ const ProfilePage = () => {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [mounted, user, token, appService, router, searchParams]);
+  }, [mounted, user, token, appService, router, searchParams, signingOut]);
 
   useTheme({ systemUIVisible: false });
 
-  const { quotas: _quotas, userProfilePlan = 'free', customizationPurchased } = useQuotaStats();
-  const {
-    handleLogout,
-    handleResetPassword,
-    handleUpdateEmail,
-    handleConfirmDelete,
-    handleDeleteAllBooks,
-  } = useUserActions();
+  const { quotas, userProfilePlan = 'free', customizationPurchased } = useQuotaStats();
 
   const { availablePlans, iapAvailable } = useAvailablePlans({
     hasIAP: appService?.hasIAP || false,

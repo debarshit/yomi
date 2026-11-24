@@ -7,6 +7,8 @@ import {
   useDictionaryResults,
   DictionaryResultsHeader,
   DictionaryResultsBody,
+  lookupToPin,
+  type UseDictionaryResultsArgs,
   type VocabularyCapture,
 } from './DictionaryResultsView';
 import type { DictionarySelectionContext } from '@/services/dictionaries/types';
@@ -17,8 +19,12 @@ interface DictionarySheetProps {
   selection?: DictionarySelectionContext;
   /** Save this lookup to the vocabulary builder and show the Learning / Mastered chips. */
   capture?: VocabularyCapture;
+  /** Ask the AI context dictionary alone (the Context Dictionary tool, #7497). */
+  contextOnly?: boolean;
   onDismiss: () => void;
   onManage?: () => void;
+  /** Move the lookup into the Notebook's Dictionary tab; omit to hide the pin. */
+  onPin?: (lookup: UseDictionaryResultsArgs) => void;
 }
 
 const DictionarySheet: React.FC<DictionarySheetProps> = ({
@@ -26,10 +32,14 @@ const DictionarySheet: React.FC<DictionarySheetProps> = ({
   lang,
   selection,
   capture,
+  contextOnly,
   onDismiss,
   onManage,
+  onPin,
 }) => {
-  const state = useDictionaryResults({ word, lang, selection, capture });
+  const state = useDictionaryResults({ word, lang, selection, capture, contextOnly });
+  const handlePin = () =>
+    onPin?.(lookupToPin({ word, lang, selection, capture, contextOnly }, state));
   return (
     <Dialog
       isOpen
@@ -45,13 +55,16 @@ const DictionarySheet: React.FC<DictionarySheetProps> = ({
           canGoBack={state.canGoBack}
           goBack={state.goBack}
           onManage={onManage}
+          onPin={onPin && handlePin}
           onSpeak={state.speakWord}
           speaking={state.isSpeaking}
           vocabularyLang={state.vocabularyLang}
           manualVocabularyOccurrence={state.manualVocabularyOccurrence}
         />
       }
-      contentClassName='px-0! mt-0!'
+      // The sheet renders inside the `select-none` reader page; let its
+      // definitions be selected and copied, as in DictionaryPopup (#7731).
+      contentClassName='px-0! mt-0! select-text'
       onClose={onDismiss}
     >
       <DictionaryResultsBody {...state} />

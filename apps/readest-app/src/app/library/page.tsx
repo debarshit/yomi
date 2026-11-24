@@ -83,7 +83,12 @@ import { useOpenBuddyReadLink } from '@/hooks/useOpenBuddyReadLink';
 import { useOpenDeviceLink } from '@/hooks/useOpenDeviceLink';
 import { useClipUrlIngress } from '@/hooks/useClipUrlIngress';
 import { useKeyDownActions } from '@/hooks/useKeyDownActions';
-import { SelectedFile, resolveTauriFileName, useFileSelector } from '@/hooks/useFileSelector';
+import {
+  SelectedFile,
+  resolveTauriFileName,
+  toastSkippedBooks,
+  useFileSelector,
+} from '@/hooks/useFileSelector';
 import { lockScreenOrientation, selectDirectory, showFilePicker } from '@/utils/bridge';
 import { useAndroidPickedBooks } from '@/hooks/useAndroidFilePicker';
 import { requestStoragePermission } from '@/utils/permission';
@@ -630,7 +635,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     const selectedFiles: SelectedFile[] = event.detail.files;
     const groupId: string = event.detail.groupId || '';
     if (selectedFiles.length === 0) return;
-    await importBooks(selectedFiles, groupId);
+    await importBooks(selectedFiles, groupId, { skipped: event.detail.skipped });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1039,7 +1044,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const importBooks = (
     files: SelectedFile[],
     groupId?: string,
-    options: { silent?: boolean } = {},
+    options: { silent?: boolean; skipped?: string[] } = {},
   ): Promise<{ failedPaths: string[]; importedCount: number }> =>
     // Whole runs are serialized (see enqueueImportRun); the lookup index is
     // built inside the run so a queued run sees everything the previous one
@@ -1049,7 +1054,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const importBooksRun = async (
     files: SelectedFile[],
     groupId?: string,
-    options: { silent?: boolean } = {},
+    options: { silent?: boolean; skipped?: string[] } = {},
   ): Promise<{ failedPaths: string[]; importedCount: number }> => {
     setLoading(true);
     const { library } = useLibraryStore.getState();
@@ -1064,6 +1069,15 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     // importBook can recognize a re-import of the same file.
     const lookupIndex = buildBookLookupIndex(library, appService?.osPlatform);
     const failedImports: Array<{ filename: string; errorMessage: string }> = [];
+    // Files the picker or drop skipped for their format are reported with this
+    // run's own failures, named together as their toast always did. A toast of
+    // their own was replaced by this run's success or failure toast (#6991).
+    if (options.skipped?.length) {
+      failedImports.push({
+        filename: options.skipped.join(', '),
+        errorMessage: _(getImportErrorMessage('Unsupported format')),
+      });
+    }
     const failedPaths: string[] = [];
     const successfulImports: string[] = [];
 
@@ -1459,14 +1473,17 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       return;
     }
     selectFiles({ type: 'books', multiple: true }).then((result) => {
-      if (result.files.length === 0 || result.error) return;
-      importBooks(result.files, getImportTargetGroupId());
+      if (!result.error) importPickedBooks(result.files, result.skipped);
     });
   };
 
-  useAndroidPickedBooks(appService, (files) => {
-    importBooks(files, getImportTargetGroupId());
-  });
+  // Picked books, with the names the picker skipped for their format.
+  const importPickedBooks = (files: SelectedFile[], skipped: string[] = []) => {
+    if (files.length > 0) importBooks(files, getImportTargetGroupId(), { skipped });
+    else toastSkippedBooks(_, skipped);
+  };
+
+  useAndroidPickedBooks(appService, importPickedBooks);
 
   const handleImportBookFromUrl = async (url: string) => {
     // Tauri-only. Routes through the Rust `clip_url` command which spawns
@@ -1920,7 +1937,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     // preserving structure we leave groupId undefined so importBooks
     // derives nested groupNames from each file's basePath.
     const targetGroupId = result.flatten ? searchParams?.get('group') || '' : undefined;
-    importBooks(toImportFiles, targetGroupId);
+    // Awaited, so a drop waiting on its folders waits for the books too.
+    await importBooks(toImportFiles, targetGroupId);
   };
 
   const handleSetSelectMode = (selectMode: boolean) => {

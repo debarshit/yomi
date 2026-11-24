@@ -1,7 +1,7 @@
 // AnkiDroid's content provider, reached through the native bridge (Android
 // only). See docs/superpowers/specs/2026-11-04-anki-link-design.md
 import { invoke } from '@tauri-apps/api/core';
-import type { AnkiOutgoingNote, AnkiTagUpdate } from './anki';
+import type { AnkiNoteFill, AnkiOutgoingNote, AnkiTagUpdate } from './anki';
 
 /** `permission`: Readest can't use AnkiDroid. `not_ready`: AnkiDroid was never opened. */
 export type AnkiErrorCode = 'permission' | 'not_ready';
@@ -19,6 +19,8 @@ export interface AnkiDeck {
 
 export interface AnkiNoteRow {
   id: number;
+  /** The note's note type. */
+  mid: number;
   fields: string[];
   tags: string;
 }
@@ -70,11 +72,57 @@ export const ankiReadDeck = async (
   return { notes: res.notes ?? [], cards: res.cards };
 };
 
-/** Add notes to a deck (created if missing); resolves with how many were added. */
-export const ankiAddNotes = async (deckName: string, notes: AnkiOutgoingNote[]): Promise<number> =>
-  (await call<{ added?: number; error?: string }>('anki_add_notes', { deckName, notes })).added ??
-  0;
+/** Add notes to their decks (created if missing); resolves with how many were added. */
+export const ankiAddNotes = async (notes: AnkiOutgoingNote[]): Promise<number> => {
+  const byDeck = new Map<string, Omit<AnkiOutgoingNote, 'deck'>[]>();
+  for (const { deck, ...note } of notes) {
+    const group = byDeck.get(deck);
+    if (group) group.push(note);
+    else byDeck.set(deck, [note]);
+  }
+  let added = 0;
+  for (const [deckName, group] of byDeck) {
+    added +=
+      (await call<{ added?: number; error?: string }>('anki_add_notes', { deckName, notes: group }))
+        .added ?? 0;
+  }
+  return added;
+};
 
 /** Replace the tags of existing notes; resolves with how many were updated. */
 export const ankiUpdateTags = async (notes: AnkiTagUpdate[]): Promise<number> =>
   (await call<{ updated?: number; error?: string }>('anki_update_tags', { notes })).updated ?? 0;
+
+/**
+ * The Readest note type: whether it is behind its current fields or template
+ * (#7729), and its id and field names, which are absent before Sync created it.
+ */
+export const ankiNoteType = async (): Promise<{
+  outdated: boolean;
+  id?: number;
+  fields?: string[];
+}> => {
+  const { outdated, id, fields } = await call<{
+    outdated?: boolean;
+    id?: number;
+    fields?: string[];
+    error?: string;
+  }>('anki_note_type');
+  return { outdated: !!outdated, id, fields };
+};
+
+/**
+ * Put dictionary entries (#7728) into the empty Entry field of Readest's notes;
+ * resolves with how many were set.
+ */
+export const ankiSetEntries = async (notes: { id: number; entry: string }[]): Promise<number> =>
+  (await call<{ updated?: number; error?: string }>('anki_set_entries', { notes })).updated ?? 0;
+
+/**
+ * Give the note type its audio fields and template, filling them on the notes
+ * Sync added before; resolves with how many notes were filled. Adding fields
+ * makes AnkiDroid's next AnkiWeb sync a full one.
+ */
+export const ankiUpgradeNoteType = async (notes: AnkiNoteFill[]): Promise<number> =>
+  (await call<{ updated?: number; error?: string }>('anki_upgrade_note_type', { notes })).updated ??
+  0;

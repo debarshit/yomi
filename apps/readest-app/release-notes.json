@@ -1,5 +1,15 @@
 {
   "releases": {
+    "0.12.23": {
+      "date": "2026-11-24",
+      "notes": [
+        "Reader: Improved touch selection handles on Windows and Linux",
+        "Sync: Enhanced cloud sync resilience and error handling for large libraries",
+        "Library: Added prioritized sorting and support for bookshelf covers",
+        "Audio & TTS: Improved playback routing and responsive reading controls",
+        "General: Stability improvements, bug fixes, and latest upstream updates"
+      ]
+    },
     "0.12.22": {
       "date": "2026-11-20",
       "notes": [

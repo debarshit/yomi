@@ -1,3 +1,4 @@
+#if canImport(FoundationModels) && canImport(XCTest)
 import FoundationModels
 import XCTest
 
@@ -184,3 +185,4 @@ final class OnDeviceLLMTests: XCTestCase {
       "Apple Intelligence is not available on this device.")
   }
 }
+#endif

@@ -96,12 +96,22 @@ enum OnDeviceLLM {
     @available(iOS 26.0, *)
     static func start(
       _ args: OnDeviceLLMGenerateArgs,
-      makeSession: @escaping @Sendable (String) -> LanguageModelSession = { instructions in
-        // Book text is the user's own content being translated or explained.
-        LanguageModelSession(
-          model: SystemLanguageModel(guardrails: .permissiveContentTransformations),
-          instructions: instructions)
-      },
+      completion: @escaping @Sendable (Result<String, OnDeviceLLMFailure>) -> Void
+    ) {
+      start(
+        args,
+        makeSession: { instructions in
+          LanguageModelSession(
+            model: SystemLanguageModel(guardrails: .permissiveContentTransformations),
+            instructions: instructions)
+        },
+        completion: completion)
+    }
+
+    @available(iOS 26.0, *)
+    static func start(
+      _ args: OnDeviceLLMGenerateArgs,
+      makeSession: @escaping @Sendable (String) -> LanguageModelSession,
       completion: @escaping @Sendable (Result<String, OnDeviceLLMFailure>) -> Void
     ) {
       // Registered under the lock so a fast reply can't remove its entry first.

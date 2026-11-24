@@ -129,6 +129,7 @@ jobs:
 
       - name: Build iOS Production Bundle (.ipa)
         env:
+          RUST_BACKTRACE: 1
           IOS_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           IOS_MOBILE_PROVISION: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}

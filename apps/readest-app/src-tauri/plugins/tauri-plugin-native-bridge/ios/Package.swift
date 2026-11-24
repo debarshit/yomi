@@ -31,10 +31,6 @@ let package = Package(
       dependencies: [
         .byName(name: "Tauri")
       ],
-      path: "Sources"),
-    .testTarget(
-      name: "PluginTests",
-      dependencies: [.byName(name: "tauri-plugin-native-bridge")],
-      path: "Tests/PluginTests"),
+      path: "Sources")
   ]
 )

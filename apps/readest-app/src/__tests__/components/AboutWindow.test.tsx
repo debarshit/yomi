@@ -201,7 +201,7 @@ describe('AboutWindow licensing and attribution', () => {
   it('renders copyright, Readest attribution, AGPL license, and GitHub source code link', async () => {
     await openDialog();
 
-    expect(screen.getByText(/Biblophile & Readest contributors/)).toBeDefined();
+    expect(screen.getByText(/Biblophile\. All rights reserved/)).toBeDefined();
 
     const readestLink = screen.getByRole('link', { name: 'Readest' });
     expect(readestLink.getAttribute('href')).toBe('https://github.com/readest/readest');
@@ -297,6 +297,5 @@ describe('AboutWindow check update error auto-revert', () => {
     });
     expect(screen.queryByText('Error checking for updates')).toBeNull();
     expect(screen.getByRole('button', { name: 'Check Update' })).toBeTruthy();
-  });
   });
 });

@@ -145,7 +145,6 @@ enum OnDeviceLLM {
   static let tooLongMessage = "The text is too long for Apple Intelligence on this device."
 
   #if canImport(FoundationModels)
-    /// iOS 26 reports an overflow as a session GenerationError, iOS 27 as a LanguageModelError.
     @available(iOS 26.0, *)
     private static func isContextOverflow(_ error: Error) -> Bool {
       if let error = error as? LanguageModelSession.GenerationError,
@@ -153,9 +152,8 @@ enum OnDeviceLLM {
       {
         return true
       }
-      if #available(iOS 27.0, *), let error = error as? LanguageModelError,
-        case .contextSizeExceeded = error
-      {
+      let desc = String(describing: error)
+      if desc.contains("contextSizeExceeded") || desc.contains("exceededContextWindowSize") {
         return true
       }
       return false
